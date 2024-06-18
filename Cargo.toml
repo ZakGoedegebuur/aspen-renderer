@@ -1,6 +1,6 @@
 [package]
 name = "aspen-renderer"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "Rendering library for the Aspen engine"
@@ -10,3 +10,6 @@ repository = "https://github.com/ZakGoedegebuur/aspen-renderer"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+aspen-loader = "0.1.1"
+vulkano = "0.34.1"
+winit = "0.30.0"
