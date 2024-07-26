@@ -1,6 +1,6 @@
 [package]
 name = "aspen-renderer"
-version = "0.1.1"
+version = "0.1.11"
 edition = "2021"
 license = "MIT"
 description = "Rendering library for the Aspen engine"

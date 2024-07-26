@@ -102,7 +102,7 @@ checksum = "a900b538c868d928b2e65ac7dac1263dcb4674a1df0323650e64e1a8044c3212"
 
 [[package]]
 name = "aspen-renderer"
-version = "0.1.1"
+version = "0.1.11"
 dependencies = [
  "aspen-loader",
  "slotmap",
