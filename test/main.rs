@@ -1,9 +1,9 @@
 use std::{collections::{BTreeMap, HashMap}, io::Read, sync::{Arc, Mutex}, time::Instant};
 
-use aspen_renderer::Renderer;
-use render::{circles_renderscript, PosColVertex};
+use aspen_renderer::{render_system::DefaultRenderSystem, renderpass::DynamicRenderPass, submit_system::DynamicSubmitSystem, Renderer};
+use passes::{circles::CirclesRenderPass, present::PresentSystem};
 use vulkano::{
-    buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, format::Format, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, RasterizationState}, vertex_input::{VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, VertexInputState}, viewport::ViewportState, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::Subpass, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}};
+    buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, format::Format, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, RasterizationState}, vertex_input::{Vertex, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, VertexInputState}, viewport::ViewportState, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::Subpass, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}};
 use winit::{
     event::{
         Event, 
@@ -15,7 +15,6 @@ use winit::{
     }
 };
 
-mod render;
 mod passes;
 
 pub struct RenderData {
@@ -23,6 +22,15 @@ pub struct RenderData {
     pub ubo: Arc<Mutex<SubbufferAllocator>>,
     pub pipeline: Arc<GraphicsPipeline>,
     pub meshes: HashMap<&'static str, IndexedMesh>
+}
+
+#[derive(Debug, BufferContents, Vertex)]
+#[repr(C)]
+pub struct PosColVertex {
+    #[format(R32G32_SFLOAT)]
+    pub position: [f32; 2],
+    #[format(R32G32B32_SFLOAT)]
+    pub color: [f32; 3],
 }
 
 #[derive(Clone)]
@@ -162,6 +170,8 @@ fn main() {
         .unwrap()
     };
 
+    
+
     let hex_mesh = {
         let mut verts: Vec<PosColVertex> = Vec::new();
 
@@ -246,16 +256,34 @@ fn main() {
                     window.recreate_swapchain = true;
                 },
                 WindowEvent::RedrawRequested => {
+                    let rendersystem = DefaultRenderSystem::new(
+                        DynamicSubmitSystem::new(PresentSystem {
+                            window: renderer.windows.get(&window_id).unwrap().clone()
+                        }), 
+                        vec![
+                            DynamicRenderPass::from_renderpass(
+                                CirclesRenderPass {
+                                    elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
+                                    ubo: uniform_buffer.clone(),
+                                    pipeline: pipeline.clone(),
+                                    meshes: meshes.clone()
+                                }
+                            )
+                        ]
+                    );
+
                     let mut barrier = renderer.comms.send(
-                        circles_renderscript(
-                            renderer.windows.get(&window_id).unwrap().clone(), 
-                            RenderData {
-                                elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                                ubo: uniform_buffer.clone(),
-                                pipeline: pipeline.clone(),
-                                meshes: meshes.clone()
-                            }
-                        )
+                        //circles_renderscript(
+                        //    renderer.windows.get(&window_id).unwrap().clone(), 
+                        //    RenderData {
+                        //        elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
+                        //        ubo: uniform_buffer.clone(),
+                        //        pipeline: pipeline.clone(),
+                        //        meshes: meshes.clone()
+                        //    }
+                        //)
+
+                        Box::new(rendersystem)
                     );
 
                     _ = proxy.send_event(GlobalEvent::Update);
@@ -269,16 +297,35 @@ fn main() {
                 let barriers: Vec<_> = windows
                     .iter()
                     .map(|(_, w)| {
-                        renderer.comms.send(
-                            circles_renderscript(
-                                w.clone(), 
-                                RenderData {
-                                    elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                                    ubo: uniform_buffer.clone(),
-                                    pipeline: pipeline.clone(),
-                                    meshes: meshes.clone()
+                        let rendersystem = DefaultRenderSystem::new(
+                            DynamicSubmitSystem::new(
+                                PresentSystem {
+                                    window: w.clone()
                                 }
-                            )
+                            ), 
+                            vec![
+                                DynamicRenderPass::from_renderpass(
+                                    CirclesRenderPass {
+                                        elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
+                                        ubo: uniform_buffer.clone(),
+                                        pipeline: pipeline.clone(),
+                                        meshes: meshes.clone()
+                                    }
+                                )
+                            ]
+                        );
+
+                        renderer.comms.send(
+                            //circles_renderscript(
+                            //    w.clone(), 
+                            //    RenderData {
+                            //        elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
+                            //        ubo: uniform_buffer.clone(),
+                            //        pipeline: pipeline.clone(),
+                            //        meshes: meshes.clone()
+                            //    }
+                            //)
+                            Box::new(rendersystem)
                         )
                     })
                     .collect();

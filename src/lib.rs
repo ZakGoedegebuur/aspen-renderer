@@ -1,9 +1,8 @@
-pub mod renderscript;
 pub mod window_surface;
-pub mod pipeline;
 pub mod drawable;
 pub mod renderpass;
 pub mod submit_system;
+pub mod render_system;
 
 use std::{
     collections::HashMap, 
@@ -21,10 +20,11 @@ use std::{
     thread
 };
 
-pub use renderscript::RenderScript;
+use render_system::RenderSystem;
 use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator, 
-    descriptor_set::allocator::StandardDescriptorSetAllocator, device::{
+    descriptor_set::allocator::StandardDescriptorSetAllocator, 
+    device::{
         physical::PhysicalDeviceType, 
         Device, 
         DeviceCreateInfo, 
@@ -268,14 +268,14 @@ impl Renderer {
 
         let graphics_objects = graphics_objects_original.clone();
 
-        let (sender, reciever) = sync_channel::<(RenderScript, Sender<()>)>(1);
+        let (sender, reciever) = sync_channel::<(Box<dyn RenderSystem + Send>, Sender<()>)>(1);
         let render_closure = move || {
-            let graphics_objects = graphics_objects_original.clone();
+            let graphics_objects = Arc::new(graphics_objects_original.clone());
             loop {
                 match reciever.recv() {
                     Err(_) => break,
-                    Ok((rendergraph, msender)) => {
-                        rendergraph.run(&graphics_objects);
+                    Ok((mut rendergraph, msender)) => {
+                        rendergraph.run(graphics_objects.clone());
 
                         _ = msender.send(())
                     },
@@ -313,14 +313,14 @@ impl Renderer {
 }
 
 pub struct RenderThreadComms {
-    pub sender: Option<SyncSender<(RenderScript, Sender<()>)>>,
+    pub sender: Option<SyncSender<(Box<dyn RenderSystem + Send>, Sender<()>)>>,
     pub render_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl RenderThreadComms {
-    pub fn send(&mut self, renderscript: RenderScript) -> PresentBarrier {
+    pub fn send(&mut self, render_system: Box<dyn RenderSystem + Send>) -> PresentBarrier {
         let (sender, reciever) = channel();
-        self.sender.as_ref().unwrap().send((renderscript, sender)).expect("Render thread hung up");
+        self.sender.as_ref().unwrap().send((render_system, sender)).expect("Render thread hung up");
         PresentBarrier {
             reciever: Some(reciever)
         }

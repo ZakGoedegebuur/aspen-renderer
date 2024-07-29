@@ -22,16 +22,16 @@ pub trait RenderPass {
     type SharedData;
     type PreProcessed;
     type Output;
-    fn preprocess(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>) -> Result<Self::PreProcessed, HaltPolicy>;
-    fn build_commands(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>, cmd_buffer: &mut CmdBuffer, preprocessed: Self::PreProcessed) -> Result<Self::Output, HaltPolicy>;
-    fn postprocess(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>, output: Self::Output);
+    fn preprocess(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>) -> Result<Self::PreProcessed, HaltPolicy>;
+    fn build_commands(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>, cmd_buffer: &mut Box<CmdBuffer>, preprocessed: Self::PreProcessed) -> Result<Self::Output, HaltPolicy>;
+    fn postprocess(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>, output: Self::Output);
 }
 
 pub trait RenderPassCont {
     type SharedData;
-    fn preprocess(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>) -> Result<(), HaltPolicy>;
-    fn build_commands(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>, cmd_buffer: &mut CmdBuffer) -> Result<(), HaltPolicy>;
-    fn postprocess(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>);
+    fn preprocess(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>) -> Result<(), HaltPolicy>;
+    fn build_commands(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>, cmd_buffer: &mut Box<CmdBuffer>) -> Result<(), HaltPolicy>;
+    fn postprocess(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>);
 }
 
 enum RenderPassType<PreT, PostT> {
@@ -46,23 +46,23 @@ pub struct DynamicRenderPass<T: RenderPass> {
 }
 
 impl<T: RenderPass> DynamicRenderPass<T> {
-    pub fn from_renderpass(renderpass: T) -> Self {
-        Self {
+    pub fn from_renderpass(renderpass: T) -> Box<Self> {
+        Box::new(Self {
             data: RenderPassType::None,
             inner: renderpass
-        }
+        })
     }
 }
 
 impl<T: RenderPass> RenderPassCont for DynamicRenderPass<T> {
     type SharedData = T::SharedData;
 
-    fn preprocess(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>) -> Result<(), HaltPolicy> {
+    fn preprocess(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>) -> Result<(), HaltPolicy> {
         self.data = RenderPassType::PreProcessed(self.inner.preprocess(graphics_objects, shared)?);
         Ok(())
     }
 
-    fn build_commands(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>, cmd_buffer: &mut CmdBuffer) -> Result<(), HaltPolicy> {
+    fn build_commands(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>, cmd_buffer: &mut Box<CmdBuffer>) -> Result<(), HaltPolicy> {
         let data = match std::mem::replace(&mut self.data, RenderPassType::None) {
             RenderPassType::PreProcessed(data) => data,
             _ => panic!("data not preprocessed")
@@ -72,7 +72,7 @@ impl<T: RenderPass> RenderPassCont for DynamicRenderPass<T> {
         Ok(())
     }
 
-    fn postprocess(&mut self, graphics_objects: &GraphicsObjects, shared: &Arc<Self::SharedData>) {
+    fn postprocess(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>) {
         let data = match std::mem::replace(&mut self.data, RenderPassType::None) {
             RenderPassType::PostProcessed(data) => data,
             _ => panic!("data not postprocessed")

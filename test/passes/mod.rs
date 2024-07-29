@@ -1,2 +1,2 @@
-mod present;
-mod circles;
+pub mod present;
+pub mod circles;

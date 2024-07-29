@@ -12,10 +12,24 @@ use aspen_renderer::{
     GraphicsObjects
 };
 
-use vulkano::{command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage}, swapchain::{acquire_next_image, SwapchainAcquireFuture, SwapchainCreateInfo, SwapchainPresentInfo}, sync::GpuFuture, Validated, VulkanError};
+use vulkano::{
+    command_buffer::{
+        AutoCommandBufferBuilder, 
+        CommandBufferUsage
+    }, 
+    swapchain::{
+        acquire_next_image, 
+        SwapchainAcquireFuture,
+        SwapchainCreateInfo, 
+        SwapchainPresentInfo
+    }, 
+    sync::GpuFuture, 
+    Validated, 
+    VulkanError
+};
 
 pub struct PresentSystem { 
-    window: Arc<Mutex<WindowSurface>>
+    pub window: Arc<Mutex<WindowSurface>>
 }
 
 pub struct PreProcessed {
@@ -33,7 +47,7 @@ impl SubmitSystem for PresentSystem {
     type SharedType = SharedInfo;
     type SetupType = PreProcessed;
 
-    fn setup(&mut self, graphics_objects: &GraphicsObjects) -> Result<(Self::SharedType, Self::SetupType, Box<CmdBuffer>), HaltPolicy> {
+    fn setup(&mut self, graphics_objects: Arc<GraphicsObjects>) -> Result<(Self::SharedType, Self::SetupType, Box<CmdBuffer>), HaltPolicy> {
         let mut window = self.window.lock().unwrap();
         let image_extent: [u32; 2] = window.window.inner_size().into();
         
@@ -98,7 +112,7 @@ impl SubmitSystem for PresentSystem {
         ))
     }
 
-    fn submit(&mut self, graphics_objects: &GraphicsObjects, cmd_buffer: Box<CmdBuffer>, setup_data: Self::SetupType) {
+    fn submit(&mut self, graphics_objects: Arc<GraphicsObjects>, cmd_buffer: Box<CmdBuffer>, setup_data: Self::SetupType) {
         let mut window = self.window.lock().unwrap();
         let command_buffer = cmd_buffer.build().unwrap();
 

@@ -1,7 +1,0 @@
-struct Pipeline {
-    
-}
-
-impl Pipeline {
-    
-}

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::{Arc, Mutex}};
 
-use aspen_renderer::renderpass::RenderPass;
+use aspen_renderer::{renderpass::{CmdBuffer, RenderPass}, GraphicsObjects};
 use vulkano::{
     buffer::{
         allocator::SubbufferAllocator, 
@@ -26,11 +26,11 @@ impl RenderPass for CirclesRenderPass {
     type PreProcessed = ();
     type Output = ();
 
-    fn preprocess(&mut self, _: &aspen_renderer::GraphicsObjects, _: &Arc<Self::SharedData>) -> Result<Self::PreProcessed, aspen_renderer::renderpass::HaltPolicy> {
+    fn preprocess(&mut self, _: Arc<GraphicsObjects>, _: Arc<Self::SharedData>) -> Result<Self::PreProcessed, aspen_renderer::renderpass::HaltPolicy> {
         Ok(())
     }
 
-    fn build_commands(&mut self, graphics_objects: &aspen_renderer::GraphicsObjects, shared: &Arc<Self::SharedData>, _: &mut aspen_renderer::renderpass::CmdBuffer, _: Self::PreProcessed) -> Result<Self::Output, aspen_renderer::renderpass::HaltPolicy> {
+    fn build_commands(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>, cmd_buffer: &mut Box<CmdBuffer>, _: Self::PreProcessed) -> Result<Self::Output, aspen_renderer::renderpass::HaltPolicy> {
         let elapsed_time = self.elapsed_time * 2.0;
         let aspect_ratio = shared.image_extent[1] as f32 / shared.image_extent[0] as f32;
         
@@ -106,17 +106,11 @@ impl RenderPass for CirclesRenderPass {
             )
             .unwrap();
         
-        let mut builder = AutoCommandBufferBuilder::primary(
-            &graphics_objects.command_buffer_allocator, 
-            graphics_objects.graphics_queue.queue_family_index(), 
-            CommandBufferUsage::OneTimeSubmit,
-        ).unwrap();
-
         let mesh = self.meshes.get("hex").unwrap();
 
         let window = shared.window.lock().unwrap();
 
-        builder
+        cmd_buffer
             .begin_render_pass(
                 RenderPassBeginInfo {
                     clear_values: vec![Some([0.07, 0.07, 0.07, 1.0].into())],
@@ -150,7 +144,7 @@ impl RenderPass for CirclesRenderPass {
         Ok(())
     }
 
-    fn postprocess(&mut self, _: &aspen_renderer::GraphicsObjects, _: &Arc<Self::SharedData>, _: Self::Output) {
+    fn postprocess(&mut self, _: Arc<GraphicsObjects>, _: Arc<Self::SharedData>, _: Self::Output) {
         
     }
 }
