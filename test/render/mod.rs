@@ -1,7 +1,7 @@
-use std::sync::{
+use std::{sync::{
     Arc, 
     Mutex
-};
+}, time::Instant};
 
 use aspen_renderer::{
     window_surface::WindowSurface, 
@@ -17,7 +17,7 @@ use vulkano::{
     }, descriptor_set::{
         PersistentDescriptorSet, 
         WriteDescriptorSet
-    }, pipeline::{
+    }, padded::Padded, pipeline::{
         graphics::vertex_input::Vertex, Pipeline, PipelineBindPoint
     }, swapchain::{
         acquire_next_image, 
@@ -39,6 +39,8 @@ pub struct PosColVertex {
 
 pub fn circles_renderscript(window: Arc<Mutex<WindowSurface>>, render_data: RenderData) -> RenderScript {
     RenderScript::new(move |GraphicsObjects { device, descriptor_set_allocator, command_buffer_allocator, graphics_queue, .. }| {
+        let sbt = Instant::now();
+
         let mut window = window.lock().unwrap();
         let image_extent: [u32; 2] = window.window.inner_size().into();
         
@@ -84,31 +86,62 @@ pub fn circles_renderscript(window: Arc<Mutex<WindowSurface>>, render_data: Rend
         }
 
         let elapsed_time = render_data.elapsed_time * 2.0;
-        let v_offset = [0.0, 0.0];
         let aspect_ratio = image_extent[1] as f32 / image_extent[0] as f32;
         
-        let data: [f32; 40] = [
-            aspect_ratio, 0.5,
-            v_offset[0], v_offset[1],
-            0.0, 0.0,
-            0.0, 0.0,
-            
-            0.0 - (elapsed_time + (3.141 * 0.0)).sin() * 1.5, -0.0,
-            0.45, 0.45,
-            0.3, 1.0, 0.5, 1.0,
-            
-            0.0, 0.0 + (elapsed_time + (3.141 * 0.25)).sin() * 1.5,
-            0.45, 0.45,
-            1.0, 0.2, 0.5, 1.0,
-            
-            0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 1.5, 0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 1.5,
-            0.45, 0.45,
-            0.3, 0.5, 1.0, 1.0,
-            
-            0.0 + (elapsed_time + (3.141 * 0.75)).sin() * 1.5, 0.0 - (elapsed_time + (3.141 * 0.75)).sin() * 1.5,
-            0.45, 0.45,
-            1.0, 0.5, 0.2, 1.0,
-        ];
+        #[derive(BufferContents)]
+        #[repr(C)]
+        struct UBOHeader {
+            aspect_ratio: f32,
+            viewport_scale: f32,
+            viewport_offset: [f32; 2],
+            time: f32,
+        }
+
+        #[derive(BufferContents)]
+        #[repr(C)]
+        struct UBOPerObject {
+            offset: [f32; 2],
+            scale: [f32; 2],
+            color_offset: Padded<[f32; 3], 4>
+        }
+
+        #[derive(BufferContents)]
+        #[repr(C)]
+        struct UBOData {
+            header: Padded<UBOHeader, 12>,
+            per_object: [UBOPerObject; 4]
+        }
+
+        let data = UBOData {
+            header: Padded(UBOHeader {
+                aspect_ratio,
+                viewport_scale: 0.5,
+                viewport_offset: [0.0, 0.0],
+                time: elapsed_time
+            }),
+            per_object: [
+                UBOPerObject {
+                    offset: [0.0 - (elapsed_time + (3.141 * 0.0)).sin() * 1.5, -0.0],
+                    scale: [0.45, 0.45],
+                    color_offset: Padded([0.3, 1.0, 0.5])
+                },
+                UBOPerObject {
+                    offset: [0.0, 0.0 + (elapsed_time + (3.141 * 0.25)).sin() * 1.5],
+                    scale: [0.45, 0.45],
+                    color_offset: Padded([1.0, 0.2, 0.5])
+                },
+                UBOPerObject {
+                    offset: [0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 1.5, 0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 1.5],
+                    scale: [0.45, 0.45],
+                    color_offset: Padded([0.3, 0.5, 1.0])
+                },
+                UBOPerObject {
+                    offset: [0.0 + (elapsed_time + (3.141 * 0.75)).sin() * 1.5, 0.0 - (elapsed_time + (3.141 * 0.75)).sin() * 1.5],
+                    scale: [0.45, 0.45],
+                    color_offset: Padded([1.0, 0.5, 0.2])
+                },
+            ]
+        };
 
         let subbuffer = {
             let ubo = render_data.ubo.lock().unwrap();
@@ -118,8 +151,8 @@ pub fn circles_renderscript(window: Arc<Mutex<WindowSurface>>, render_data: Rend
         };
         
         let set = PersistentDescriptorSet::new(
-            descriptor_set_allocator, 
-            render_data.pipeline.layout().set_layouts()[0].clone(), 
+                descriptor_set_allocator, 
+                render_data.pipeline.layout().set_layouts()[0].clone(), 
                 [
                     WriteDescriptorSet::buffer(0, subbuffer)
                 ], 
@@ -180,7 +213,7 @@ pub fn circles_renderscript(window: Arc<Mutex<WindowSurface>>, render_data: Rend
                 fence.boxed_send()
             }
         };
-
+        
         let future = previous_future
             .join(acquire_future)
             .then_execute(graphics_queue.clone(), command_buffer.clone())
@@ -195,7 +228,6 @@ pub fn circles_renderscript(window: Arc<Mutex<WindowSurface>>, render_data: Rend
         window.previous_frame_fences[image_index as usize] = match future.map_err(Validated::unwrap) {
             Ok(value) => Some(Arc::new(value)),
             Err(VulkanError::OutOfDate) => {
-                window.recreate_swapchain = true;
                 let winextent = window.window.inner_size();
                 let swapextent: Vec<[u32; 3]> = window.images.iter().map(|image| image.extent()).collect();
                 println!("Fence out of date.\nWindow size:\n{:#?}\nSwapchain image sizes:\n{:#?}", winextent, swapextent);
@@ -208,5 +240,8 @@ pub fn circles_renderscript(window: Arc<Mutex<WindowSurface>>, render_data: Rend
         };
 
         window.previous_frame_index = image_index;
+
+        let duration = Instant::now().duration_since(sbt);
+        println!("script took {}ms", duration.as_millis());
     })
 }

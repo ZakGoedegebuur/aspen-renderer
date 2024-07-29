@@ -1,26 +1,62 @@
 pub mod renderscript;
 pub mod window_surface;
 pub mod pipeline;
+pub mod drawable;
+pub mod renderpass;
+pub mod submit_system;
 
 use std::{
-    collections::HashMap, sync::{
-        mpsc::{self, channel, Receiver, Sender, SyncSender}, 
+    collections::HashMap, 
+    sync::{
+        mpsc::{
+            sync_channel,
+            channel, 
+            Receiver, 
+            Sender, 
+            SyncSender
+        }, 
         Arc, 
         Mutex
-    }, thread
+    }, 
+    thread
 };
 
 pub use renderscript::RenderScript;
 use vulkano::{
-    buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, command_buffer::{allocator::StandardCommandBufferAllocator, AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo}, descriptor_set::{allocator::{DescriptorSetAllocator, StandardDescriptorSetAllocator}, layout::{DescriptorBindingFlags, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, PersistentDescriptorSet, WriteDescriptorSet}, device::{
-        physical::PhysicalDeviceType, Device, DeviceCreateInfo, DeviceExtensions, Features, Queue, QueueCreateInfo, QueueFlags
-    }, format::Format, image::{view::ImageView, Image, ImageUsage}, instance::{
+    command_buffer::allocator::StandardCommandBufferAllocator, 
+    descriptor_set::allocator::StandardDescriptorSetAllocator, device::{
+        physical::PhysicalDeviceType, 
+        Device, 
+        DeviceCreateInfo, 
+        DeviceExtensions, 
+        Features, 
+        Queue, 
+        QueueCreateInfo, 
+        QueueFlags
+    }, 
+    image::{
+        view::ImageView, 
+        Image, 
+        ImageUsage
+    }, 
+    instance::{
         Instance, 
         InstanceCreateFlags, 
         InstanceCreateInfo
-    }, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, PolygonMode, RasterizationState}, vertex_input::{Vertex, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, VertexInputState}, viewport::{Viewport, ViewportState}, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, Pipeline, PipelineBindPoint, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass, Subpass}, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}, swapchain::{
-        acquire_next_image, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo
-    }, sync::GpuFuture, Validated, VulkanError, VulkanLibrary
+    }, 
+    memory::allocator::StandardMemoryAllocator, 
+    pipeline::graphics::viewport::Viewport, 
+    render_pass::{
+        Framebuffer, 
+        FramebufferCreateInfo, 
+        RenderPass
+    }, 
+    swapchain::{
+        Surface, 
+        Swapchain, 
+        SwapchainCreateInfo
+    }, 
+    VulkanLibrary
 };
 
 use window_surface::WindowSurface;
@@ -114,8 +150,6 @@ impl Renderer {
             DeviceCreateInfo {
                 enabled_extensions: device_extensions,
                 enabled_features: Features {
-                    fill_mode_non_solid: true,
-                    wide_lines: true,
                     ..Default::default()
                 },
                 queue_create_infos: vec![QueueCreateInfo {
@@ -221,8 +255,8 @@ impl Renderer {
             )
         );
 
-        let window_2 = WindowSurface::new(event_loop, device.clone());
-        windows.insert(window_2.window.id(), Arc::new(Mutex::new(window_2)));
+        //let window_2 = WindowSurface::new(event_loop, device.clone());
+        //windows.insert(window_2.window.id(), Arc::new(Mutex::new(window_2)));
 
         let graphics_objects_original = GraphicsObjects {
             device: device.clone(),
@@ -234,14 +268,13 @@ impl Renderer {
 
         let graphics_objects = graphics_objects_original.clone();
 
-        let (sender, reciever) = mpsc::sync_channel::<(RenderScript, Sender<()>)>(1);
+        let (sender, reciever) = sync_channel::<(RenderScript, Sender<()>)>(1);
         let render_closure = move || {
+            let graphics_objects = graphics_objects_original.clone();
             loop {
                 match reciever.recv() {
                     Err(_) => break,
                     Ok((rendergraph, msender)) => {
-                        let graphics_objects = graphics_objects_original.clone();
-                        
                         rendergraph.run(&graphics_objects);
 
                         _ = msender.send(())

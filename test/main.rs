@@ -1,12 +1,9 @@
 use std::{collections::{BTreeMap, HashMap}, io::Read, sync::{Arc, Mutex}, time::Instant};
 
-use aspen_renderer::{
-    renderscript::RenderScript, Renderer
-};
-
+use aspen_renderer::Renderer;
 use render::{circles_renderscript, PosColVertex};
 use vulkano::{
-    buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, format::Format, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, PolygonMode, RasterizationState}, vertex_input::{VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, VertexInputState}, viewport::ViewportState, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::Subpass, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}};
+    buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, format::Format, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, RasterizationState}, vertex_input::{VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, VertexInputState}, viewport::ViewportState, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::Subpass, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}};
 use winit::{
     event::{
         Event, 
@@ -19,6 +16,7 @@ use winit::{
 };
 
 mod render;
+mod passes;
 
 pub struct RenderData {
     pub elapsed_time: f32,
@@ -149,7 +147,6 @@ fn main() {
                 rasterization_state: Some(RasterizationState {
                     cull_mode: CullMode::Back,
                     front_face: FrontFace::CounterClockwise,
-                    polygon_mode: PolygonMode::Line,
                     ..Default::default()
                 }),
                 multisample_state: Some(MultisampleState::default()),
@@ -204,7 +201,7 @@ fn main() {
             verts,
         )
         .unwrap();
-    
+
         let ibo = Buffer::from_iter(
             renderer.allocator().clone(), 
             BufferCreateInfo {
