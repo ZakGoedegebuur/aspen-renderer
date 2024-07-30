@@ -51,7 +51,16 @@ fn main() {
 
     let (mut renderer, main_window_id) = Renderer::new(&event_loop);
 
-    let uniform_buffer = Arc::new(Mutex::new(SubbufferAllocator::new(
+    let pass_ubo = Arc::new(Mutex::new(SubbufferAllocator::new(
+        renderer.allocator().clone(), 
+        SubbufferAllocatorCreateInfo {
+            buffer_usage: BufferUsage::UNIFORM_BUFFER,
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            ..Default::default()
+        }
+    )));
+
+    let obj_ubo = Arc::new(Mutex::new(SubbufferAllocator::new(
         renderer.allocator().clone(), 
         SubbufferAllocatorCreateInfo {
             buffer_usage: BufferUsage::UNIFORM_BUFFER,
@@ -109,22 +118,54 @@ fn main() {
         //let layout = PipelineDescriptorSetLayoutCreateInfo::from_stages(&stages);
         //println!("layout: \n{:#?}", layout);
 
-        let mut set_layouts = Vec::new();
-        set_layouts.push(
+        let set_layouts = vec![
             {
-                let mut set = DescriptorSetLayoutCreateInfo {
+                // Per frame
+                let set = DescriptorSetLayoutCreateInfo {
                     flags: DescriptorSetLayoutCreateFlags::empty(),
                     bindings: BTreeMap::new(),
                     ..Default::default()
                 };
 
-                let mut binding = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
-                binding.stages = ShaderStages::VERTEX;
-
-                set.bindings.insert(0, binding);
                 set
+            },
+            {
+                // Per pass
+                DescriptorSetLayoutCreateInfo {
+                    flags: DescriptorSetLayoutCreateFlags::empty(),
+                    bindings: BTreeMap::from([
+                        (0, {
+                            let mut binding = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
+                            binding.stages = ShaderStages::VERTEX;
+                            binding
+                        })
+                    ]),
+                    ..Default::default()
+                }
+            },
+            {
+                // Material
+                DescriptorSetLayoutCreateInfo {
+                    flags: DescriptorSetLayoutCreateFlags::empty(),
+                    bindings: BTreeMap::new(),
+                    ..Default::default()
+                }
+            },
+            {
+                // Objects
+                DescriptorSetLayoutCreateInfo {
+                    flags: DescriptorSetLayoutCreateFlags::empty(),
+                    bindings: BTreeMap::from([
+                        (0, {
+                            let mut binding = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
+                            binding.stages = ShaderStages::VERTEX;
+                            binding
+                        })
+                    ]),
+                    ..Default::default()
+                }
             }
-        );
+        ];
 
         let layout = PipelineLayout::new(
             renderer.device().clone(),
@@ -152,7 +193,7 @@ fn main() {
                 input_assembly_state: Some(InputAssemblyState::default()),
                 viewport_state: Some(ViewportState::default()),
                 rasterization_state: Some(RasterizationState {
-                    cull_mode: CullMode::Back,
+                    cull_mode: CullMode::None,
                     front_face: FrontFace::CounterClockwise,
                     ..Default::default()
                 }),
@@ -168,8 +209,6 @@ fn main() {
         )
         .unwrap()
     };
-
-    
 
     let hex_mesh = {
         let mut verts: Vec<PosColVertex> = Vec::new();
@@ -262,7 +301,8 @@ fn main() {
                         vec![
                             CirclesRenderPass {
                                 elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                                ubo: uniform_buffer.clone(),
+                                pass_ubo: pass_ubo.clone(),
+                                obj_ubo: obj_ubo.clone(),
                                 pipeline: pipeline.clone(),
                                 meshes: meshes.clone()
                             }.into()
@@ -289,7 +329,8 @@ fn main() {
                             vec![
                                 CirclesRenderPass {
                                     elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                                    ubo: uniform_buffer.clone(),
+                                    pass_ubo: pass_ubo.clone(),
+                                    obj_ubo: obj_ubo.clone(),
                                     pipeline: pipeline.clone(),
                                     meshes: meshes.clone()
                                 }.into()

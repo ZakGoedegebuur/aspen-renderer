@@ -1,6 +1,8 @@
+use core::f32;
 use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use aspen_renderer::{renderpass::{CmdBuffer, RenderPass}, GraphicsObjects};
+use glam::{Mat3, Mat4, Quat, Vec3};
 use vulkano::{
     buffer::{
         allocator::SubbufferAllocator, 
@@ -16,7 +18,8 @@ use super::present::SharedInfo;
 
 pub struct CirclesRenderPass {
     pub elapsed_time: f32,
-    pub ubo: Arc<Mutex<SubbufferAllocator>>,
+    pub pass_ubo: Arc<Mutex<SubbufferAllocator>>,
+    pub obj_ubo: Arc<Mutex<SubbufferAllocator>>,
     pub pipeline: Arc<GraphicsPipeline>,
     pub meshes: HashMap<&'static str, IndexedMesh>
 }
@@ -32,80 +35,124 @@ impl RenderPass for CirclesRenderPass {
 
     fn build_commands(&mut self, graphics_objects: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>, cmd_buffer: &mut Box<CmdBuffer>, _: Self::PreProcessed) -> Result<Self::Output, aspen_renderer::renderpass::HaltPolicy> {
         let elapsed_time = self.elapsed_time * 2.0;
-        let aspect_ratio = shared.image_extent[1] as f32 / shared.image_extent[0] as f32;
         
         #[derive(BufferContents)]
         #[repr(C)]
-        struct UBOHeader {
-            aspect_ratio: f32,
-            viewport_scale: f32,
-            viewport_offset: [f32; 2],
-            time: f32,
-        }
-
-        #[derive(BufferContents)]
-        #[repr(C)]
         struct UBOPerObject {
-            offset: [f32; 2],
-            scale: [f32; 2],
+            mat: [[f32; 4]; 4],
             color_offset: Padded<[f32; 3], 4>
         }
 
         #[derive(BufferContents)]
         #[repr(C)]
         struct UBOData {
-            header: Padded<UBOHeader, 12>,
             per_object: [UBOPerObject; 4]
         }
 
+        #[derive(BufferContents)]
+        #[repr(C)]
+        struct UBOFrameData {
+            view: [[f32; 4]; 4],
+            proj: [[f32; 4]; 4],
+        }
+
+        let aspect_ratio = shared.image_extent[0] as f32 / shared.image_extent[1] as f32;
+
+        let proj = Mat4::perspective_rh_gl(
+            std::f32::consts::FRAC_PI_2,
+            aspect_ratio,
+            0.01,
+            100.0,
+        );
+        
+        let view = Mat4::look_at_rh(
+            Vec3::new(5.0, 5.0, 5.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, -1.0, 0.0),
+        );
+
+        let scale = Mat4::from_scale(Vec3::splat(0.5));
+
+        let pass_data = UBOFrameData {
+            view: (view * scale).to_cols_array_2d(),
+            proj: proj.to_cols_array_2d(),
+        };
+
         let data = UBOData {
-            header: Padded(UBOHeader {
-                aspect_ratio,
-                viewport_scale: 0.5,
-                viewport_offset: [0.0, 0.0],
-                time: elapsed_time
-            }),
             per_object: [
                 UBOPerObject {
-                    offset: [0.0 - (elapsed_time + (3.141 * 0.0)).sin() * 1.5, -0.0],
-                    scale: [0.45, 0.45],
+                    mat: {
+                        let translation = Vec3::new(0.0 - (elapsed_time + (3.141 * 0.0)).sin() * 5.0, -0.0, 0.0);
+                        let scale = Vec3::splat(1.0);
+                        let rotation = Quat::from_rotation_z(elapsed_time % (f32::consts::PI * 2.0));
+                        Mat4::from_scale_rotation_translation(scale, rotation, translation).to_cols_array_2d()
+                    },
                     color_offset: Padded([0.3, 1.0, 0.5])
                 },
                 UBOPerObject {
-                    offset: [0.0, 0.0 + (elapsed_time + (3.141 * 0.25)).sin() * 1.5],
-                    scale: [0.45, 0.45],
+                    mat: {
+                        let translation = Vec3::new(0.0, 0.0 + (elapsed_time + (3.141 * 0.25)).sin() * 5.0, 0.0);
+                        let scale = Vec3::splat(1.0);
+                        let rotation = Quat::from_rotation_z(elapsed_time % (f32::consts::PI * 2.0));
+                        Mat4::from_scale_rotation_translation(scale, rotation, translation).to_cols_array_2d()
+                    },
                     color_offset: Padded([1.0, 0.2, 0.5])
                 },
                 UBOPerObject {
-                    offset: [0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 1.5, 0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 1.5],
-                    scale: [0.45, 0.45],
+                    mat: {
+                        let translation = Vec3::new(0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0);
+                        let scale = Vec3::splat(1.0);
+                        let rotation = Quat::from_rotation_z(elapsed_time % (f32::consts::PI * 2.0));
+                        Mat4::from_scale_rotation_translation(scale, rotation, translation).to_cols_array_2d()
+                    },
                     color_offset: Padded([0.3, 0.5, 1.0])
                 },
                 UBOPerObject {
-                    offset: [0.0 + (elapsed_time + (3.141 * 0.75)).sin() * 1.5, 0.0 - (elapsed_time + (3.141 * 0.75)).sin() * 1.5],
-                    scale: [0.45, 0.45],
+                    mat: {
+                        let translation = Vec3::new(0.0 + (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0 - (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0);
+                        let scale = Vec3::splat(1.0);
+                        let rotation = Quat::from_rotation_z(elapsed_time % (f32::consts::PI * 2.0));
+                        Mat4::from_scale_rotation_translation(scale, rotation, translation).to_cols_array_2d()
+                    },
                     color_offset: Padded([1.0, 0.5, 0.2])
                 },
             ]
         };
 
         let subbuffer = {
-            let ubo = self.ubo.lock().unwrap();
+            let ubo = self.pass_ubo.lock().unwrap();
+            let subbuffer = ubo.allocate_sized().unwrap();
+            *subbuffer.write().unwrap() = pass_data;
+            subbuffer
+        };
+
+        let pass_set = PersistentDescriptorSet::new(
+            &graphics_objects.descriptor_set_allocator, 
+            self.pipeline.layout().set_layouts()[1].clone(), 
+            [
+                WriteDescriptorSet::buffer(0, subbuffer)
+            ], 
+            []
+        )
+        .unwrap();
+
+        let subbuffer = {
+            let ubo = self.obj_ubo.lock().unwrap();
             let subbuffer = ubo.allocate_sized().unwrap();
             *subbuffer.write().unwrap() = data;
             subbuffer
         };
-        
-        let set = PersistentDescriptorSet::new(
-                &graphics_objects.descriptor_set_allocator, 
-                self.pipeline.layout().set_layouts()[0].clone(), 
-                [
-                    WriteDescriptorSet::buffer(0, subbuffer)
-                ], 
-                []
-            )
-            .unwrap();
-        
+
+        let object_set = PersistentDescriptorSet::new(
+            &graphics_objects.descriptor_set_allocator, 
+            self.pipeline.layout().set_layouts()[3].clone(), 
+            [
+                WriteDescriptorSet::buffer(0, subbuffer)
+            ], 
+            []
+        )
+        .unwrap();
+
         let mesh = self.meshes.get("hex").unwrap();
 
         let window = shared.window.lock().unwrap();
@@ -114,7 +161,7 @@ impl RenderPass for CirclesRenderPass {
             .begin_render_pass(
                 RenderPassBeginInfo {
                     clear_values: vec![Some([0.07, 0.07, 0.07, 1.0].into())],
-                    ..RenderPassBeginInfo::framebuffer( 
+                    ..RenderPassBeginInfo::framebuffer(
                         window.framebuffers[shared.current_image_index as usize].clone(),
                     )
                 },
@@ -122,6 +169,13 @@ impl RenderPass for CirclesRenderPass {
             )
             .unwrap()
             .set_viewport(0, [window.viewport.clone()].into_iter().collect())
+            .unwrap()
+            .bind_descriptor_sets(
+                PipelineBindPoint::Graphics, 
+                self.pipeline.layout().clone(), 
+                1, 
+                pass_set.clone()
+            )
             .unwrap()
             .bind_pipeline_graphics(self.pipeline.clone())
             .unwrap()
@@ -132,8 +186,8 @@ impl RenderPass for CirclesRenderPass {
             .bind_descriptor_sets(
                 PipelineBindPoint::Graphics, 
                 self.pipeline.layout().clone(), 
-                0, 
-                set.clone()
+                3, 
+                object_set.clone()
             )
             .unwrap()
             .draw_indexed(mesh.ibo.len() as u32, 4, 0, 0, 0)
