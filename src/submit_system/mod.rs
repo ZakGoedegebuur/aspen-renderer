@@ -29,6 +29,12 @@ impl<T: SubmitSystem> DynamicSubmitSystem<T> {
     }
 }
 
+impl<T: SubmitSystem> From<T> for DynamicSubmitSystem<T> {
+    fn from(value: T) -> Self {
+        DynamicSubmitSystem { inner: value, data: None }
+    }
+}
+
 impl<T: SubmitSystem> SubmitSystemCont for DynamicSubmitSystem<T> {
     type SharedType = T::SharedType;
 
@@ -42,3 +48,4 @@ impl<T: SubmitSystem> SubmitSystemCont for DynamicSubmitSystem<T> {
         self.inner.submit(graphics_objects, cmd_buffer, self.data.take().unwrap())
     }
 }
+

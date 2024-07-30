@@ -318,9 +318,9 @@ pub struct RenderThreadComms {
 }
 
 impl RenderThreadComms {
-    pub fn send(&mut self, render_system: Box<dyn RenderSystem + Send>) -> PresentBarrier {
+    pub fn send(&mut self, render_system: impl RenderSystem + Send + 'static) -> PresentBarrier {
         let (sender, reciever) = channel();
-        self.sender.as_ref().unwrap().send((render_system, sender)).expect("Render thread hung up");
+        self.sender.as_ref().unwrap().send((Box::new(render_system), sender)).expect("Render thread hung up");
         PresentBarrier {
             reciever: Some(reciever)
         }

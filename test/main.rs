@@ -1,6 +1,6 @@
 use std::{collections::{BTreeMap, HashMap}, io::Read, sync::{Arc, Mutex}, time::Instant};
 
-use aspen_renderer::{render_system::DefaultRenderSystem, renderpass::DynamicRenderPass, submit_system::DynamicSubmitSystem, Renderer};
+use aspen_renderer::{render_system::DefaultRenderSystem, Renderer};
 use passes::{circles::CirclesRenderPass, present::PresentSystem};
 use vulkano::{
     buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, format::Format, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, RasterizationState}, vertex_input::{Vertex, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, VertexInputState}, viewport::ViewportState, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::Subpass, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}};
@@ -41,7 +41,6 @@ pub struct IndexedMesh {
 
 enum GlobalEvent {
     Update,
-    Render
 }
 
 
@@ -257,34 +256,20 @@ fn main() {
                 },
                 WindowEvent::RedrawRequested => {
                     let rendersystem = DefaultRenderSystem::new(
-                        DynamicSubmitSystem::new(PresentSystem {
+                        PresentSystem {
                             window: renderer.windows.get(&window_id).unwrap().clone()
-                        }), 
+                        }.into(),
                         vec![
-                            DynamicRenderPass::from_renderpass(
-                                CirclesRenderPass {
-                                    elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                                    ubo: uniform_buffer.clone(),
-                                    pipeline: pipeline.clone(),
-                                    meshes: meshes.clone()
-                                }
-                            )
+                            CirclesRenderPass {
+                                elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
+                                ubo: uniform_buffer.clone(),
+                                pipeline: pipeline.clone(),
+                                meshes: meshes.clone()
+                            }.into()
                         ]
                     );
 
-                    let mut barrier = renderer.comms.send(
-                        //circles_renderscript(
-                        //    renderer.windows.get(&window_id).unwrap().clone(), 
-                        //    RenderData {
-                        //        elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                        //        ubo: uniform_buffer.clone(),
-                        //        pipeline: pipeline.clone(),
-                        //        meshes: meshes.clone()
-                        //    }
-                        //)
-
-                        Box::new(rendersystem)
-                    );
+                    let mut barrier = renderer.comms.send(rendersystem);
 
                     _ = proxy.send_event(GlobalEvent::Update);
                     
@@ -298,35 +283,20 @@ fn main() {
                     .iter()
                     .map(|(_, w)| {
                         let rendersystem = DefaultRenderSystem::new(
-                            DynamicSubmitSystem::new(
-                                PresentSystem {
-                                    window: w.clone()
-                                }
-                            ), 
+                            PresentSystem {
+                                window: w.clone()
+                            }.into(),
                             vec![
-                                DynamicRenderPass::from_renderpass(
-                                    CirclesRenderPass {
-                                        elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                                        ubo: uniform_buffer.clone(),
-                                        pipeline: pipeline.clone(),
-                                        meshes: meshes.clone()
-                                    }
-                                )
+                                CirclesRenderPass {
+                                    elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
+                                    ubo: uniform_buffer.clone(),
+                                    pipeline: pipeline.clone(),
+                                    meshes: meshes.clone()
+                                }.into()
                             ]
                         );
 
-                        renderer.comms.send(
-                            //circles_renderscript(
-                            //    w.clone(), 
-                            //    RenderData {
-                            //        elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                            //        ubo: uniform_buffer.clone(),
-                            //        pipeline: pipeline.clone(),
-                            //        meshes: meshes.clone()
-                            //    }
-                            //)
-                            Box::new(rendersystem)
-                        )
+                        renderer.comms.send(rendersystem)
                     })
                     .collect();
 
@@ -337,9 +307,6 @@ fn main() {
             Event::UserEvent(event) => match event {
                 GlobalEvent::Update => {
                 },
-                GlobalEvent::Render => {
-
-                }
             }
             _ => ()
         }

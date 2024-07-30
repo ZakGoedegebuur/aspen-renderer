@@ -54,6 +54,22 @@ impl<T: RenderPass> DynamicRenderPass<T> {
     }
 }
 
+impl<T> From<T> for Box<dyn RenderPassCont<SharedData = T::SharedData> + Send> 
+    where
+        T: RenderPass + Send + 'static,
+        T::PreProcessed: Send,
+        T::Output: Send
+{
+    fn from(value: T) -> Self {
+        Box::new(
+            DynamicRenderPass {
+                inner: value,
+                data: RenderPassType::None
+            }
+        )
+    }
+}
+
 impl<T: RenderPass> RenderPassCont for DynamicRenderPass<T> {
     type SharedData = T::SharedData;
 

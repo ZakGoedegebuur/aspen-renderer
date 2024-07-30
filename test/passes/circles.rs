@@ -5,7 +5,7 @@ use vulkano::{
     buffer::{
         allocator::SubbufferAllocator, 
         BufferContents
-    }, command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo}, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}, padded::Padded, pipeline::{
+    }, command_buffer::RenderPassBeginInfo, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}, padded::Padded, pipeline::{
         GraphicsPipeline, Pipeline, PipelineBindPoint
     }
 };

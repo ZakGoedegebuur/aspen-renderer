@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     renderpass::RenderPassCont, 
-    submit_system::SubmitSystemCont, 
+    submit_system::{DynamicSubmitSystem, SubmitSystem, SubmitSystemCont}, 
     GraphicsObjects
 };
 
@@ -10,24 +10,24 @@ pub trait RenderSystem {
     fn run(&mut self, graphics_objects: Arc<GraphicsObjects>);
 }
 
-pub struct DefaultRenderSystem<SST: SubmitSystemCont> {
-    submit_system: SST,
+pub struct DefaultRenderSystem<SST: SubmitSystem> {
+    submit_system: DynamicSubmitSystem<SST>,
     render_passes: Vec<Box<dyn RenderPassCont<SharedData = SST::SharedType> + Send>>
 }
 
-impl<SST: SubmitSystemCont> DefaultRenderSystem<SST> {
+impl<SST: SubmitSystem> DefaultRenderSystem<SST> {
     pub fn new(
-        submit_system: SST,
+        submit_system: DynamicSubmitSystem<SST>,
         render_passes: Vec<Box<dyn RenderPassCont<SharedData = SST::SharedType> + Send>>
     ) -> Self {
         Self {
             submit_system,
-            render_passes: render_passes.into_iter().collect()
+            render_passes,
         }
     }
 }
 
-impl<SST: SubmitSystemCont> RenderSystem for DefaultRenderSystem<SST> {
+impl<SST: SubmitSystem> RenderSystem for DefaultRenderSystem<SST> {
     fn run(&mut self, graphics_objects: Arc<GraphicsObjects>) {
         let (shared, mut cmd_buf) = match self.submit_system.setup(graphics_objects.clone()) {
             Ok(val) => val,
