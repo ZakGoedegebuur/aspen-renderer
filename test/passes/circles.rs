@@ -2,7 +2,7 @@ use core::f32;
 use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use aspen_renderer::{renderpass::{CmdBuffer, RenderPass}, GraphicsObjects};
-use glam::{Mat3, Mat4, Quat, Vec3};
+use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, Rotation3, UnitVector3, Vector3};
 use vulkano::{
     buffer::{
         allocator::SubbufferAllocator, 
@@ -17,6 +17,7 @@ use crate::IndexedMesh;
 use super::present::SharedInfo;
 
 pub struct CirclesRenderPass {
+    pub dispatch_index: u32,
     pub elapsed_time: f32,
     pub pass_ubo: Arc<Mutex<SubbufferAllocator>>,
     pub obj_ubo: Arc<Mutex<SubbufferAllocator>>,
@@ -39,7 +40,7 @@ impl RenderPass for CirclesRenderPass {
         #[derive(BufferContents)]
         #[repr(C)]
         struct UBOPerObject {
-            mat: [[f32; 4]; 4],
+            mat: [f32; 16],
             color_offset: Padded<[f32; 3], 4>
         }
 
@@ -52,67 +53,65 @@ impl RenderPass for CirclesRenderPass {
         #[derive(BufferContents)]
         #[repr(C)]
         struct UBOFrameData {
-            view: [[f32; 4]; 4],
-            proj: [[f32; 4]; 4],
+            view: [f32; 16],
+            proj: [f32; 16],
         }
 
         let aspect_ratio = shared.image_extent[0] as f32 / shared.image_extent[1] as f32;
 
-        let proj = Mat4::perspective_rh_gl(
-            std::f32::consts::FRAC_PI_2,
+        let view = Isometry3::look_at_rh(
+            &Point3::new(5.0, 5.0, 5.0),
+            &Point3::new(0.0, 0.0, 0.0),
+            &Vector3::new(0.0, -1.0, 0.0),
+        );
+
+        let proj = Perspective3::new(
             aspect_ratio,
+            std::f32::consts::FRAC_PI_2,
             0.01,
             100.0,
         );
         
-        let view = Mat4::look_at_rh(
-            Vec3::new(5.0, 5.0, 5.0),
-            Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(0.0, -1.0, 0.0),
-        );
-
-        let scale = Mat4::from_scale(Vec3::splat(0.5));
-
         let pass_data = UBOFrameData {
-            view: (view * scale).to_cols_array_2d(),
-            proj: proj.to_cols_array_2d(),
+            view: view.to_homogeneous().as_slice().try_into().unwrap(),
+            proj: proj.to_homogeneous().as_slice().try_into().unwrap(),
         };
 
         let data = UBOData {
             per_object: [
                 UBOPerObject {
                     mat: {
-                        let translation = Vec3::new(0.0 - (elapsed_time + (3.141 * 0.0)).sin() * 5.0, -0.0, 0.0);
-                        let scale = Vec3::splat(1.0);
-                        let rotation = Quat::from_rotation_z(elapsed_time % (f32::consts::PI * 2.0));
-                        Mat4::from_scale_rotation_translation(scale, rotation, translation).to_cols_array_2d()
+                        let mut mat = Matrix4::new_scaling(2.0);
+                        mat = mat.append_translation(&Vector3::new(0.0 - (elapsed_time + (3.141 * 0.0)).sin() * 5.0, -0.0, 0.0));
+                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
+                        (mat * rotation.to_homogeneous()).as_slice().try_into().unwrap()
                     },
                     color_offset: Padded([0.3, 1.0, 0.5])
                 },
                 UBOPerObject {
                     mat: {
-                        let translation = Vec3::new(0.0, 0.0 + (elapsed_time + (3.141 * 0.25)).sin() * 5.0, 0.0);
-                        let scale = Vec3::splat(1.0);
-                        let rotation = Quat::from_rotation_z(elapsed_time % (f32::consts::PI * 2.0));
-                        Mat4::from_scale_rotation_translation(scale, rotation, translation).to_cols_array_2d()
+                        let mut mat = Matrix4::new_scaling(2.0);
+                        mat = mat.append_translation(&Vector3::new(0.0, 0.0 + (elapsed_time + (3.141 * 0.25)).sin() * 5.0, 0.0));
+                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
+                        (mat * rotation.to_homogeneous()).as_slice().try_into().unwrap()
                     },
                     color_offset: Padded([1.0, 0.2, 0.5])
                 },
                 UBOPerObject {
                     mat: {
-                        let translation = Vec3::new(0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0);
-                        let scale = Vec3::splat(1.0);
-                        let rotation = Quat::from_rotation_z(elapsed_time % (f32::consts::PI * 2.0));
-                        Mat4::from_scale_rotation_translation(scale, rotation, translation).to_cols_array_2d()
+                        let mut mat = Matrix4::new_scaling(2.0);
+                        mat = mat.append_translation(&Vector3::new(0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0));
+                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
+                        (mat * rotation.to_homogeneous()).as_slice().try_into().unwrap()
                     },
                     color_offset: Padded([0.3, 0.5, 1.0])
                 },
                 UBOPerObject {
                     mat: {
-                        let translation = Vec3::new(0.0 + (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0 - (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0);
-                        let scale = Vec3::splat(1.0);
-                        let rotation = Quat::from_rotation_z(elapsed_time % (f32::consts::PI * 2.0));
-                        Mat4::from_scale_rotation_translation(scale, rotation, translation).to_cols_array_2d()
+                        let mut mat = Matrix4::new_scaling(2.0);
+                        mat = mat.append_translation(&Vector3::new(0.0 + (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0 - (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0));
+                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
+                        (mat * rotation.to_homogeneous()).as_slice().try_into().unwrap()
                     },
                     color_offset: Padded([1.0, 0.5, 0.2])
                 },

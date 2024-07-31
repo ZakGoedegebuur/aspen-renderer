@@ -11,7 +11,7 @@ repository = "https://github.com/ZakGoedegebuur/aspen-renderer"
 
 [dependencies]
 aspen-loader = "0.1.1"
-glam = "0.28.0"
+nalgebra = "0.33.0"
 slotmap = "1.0.7"
 vulkano = { version = "0.34.1" }
 winit = { version = "0.29.0", features = ["rwh_05"] }

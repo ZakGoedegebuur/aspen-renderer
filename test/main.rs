@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap}, io::Read, sync::{Arc, Mutex}, time::Instant};
+use std::{collections::HashMap, io::Read, sync::{Arc, Mutex}, time::Instant};
 
 use aspen_renderer::{render_system::DefaultRenderSystem, Renderer};
 use passes::{circles::CirclesRenderPass, present::PresentSystem};
@@ -121,25 +121,23 @@ fn main() {
         let set_layouts = vec![
             {
                 // Per frame
-                let set = DescriptorSetLayoutCreateInfo {
+                DescriptorSetLayoutCreateInfo {
                     flags: DescriptorSetLayoutCreateFlags::empty(),
-                    bindings: BTreeMap::new(),
+                    bindings: [].into(),
                     ..Default::default()
-                };
-
-                set
+                }
             },
             {
                 // Per pass
                 DescriptorSetLayoutCreateInfo {
                     flags: DescriptorSetLayoutCreateFlags::empty(),
-                    bindings: BTreeMap::from([
+                    bindings: [
                         (0, {
                             let mut binding = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
                             binding.stages = ShaderStages::VERTEX;
                             binding
                         })
-                    ]),
+                    ].into(),
                     ..Default::default()
                 }
             },
@@ -147,7 +145,7 @@ fn main() {
                 // Material
                 DescriptorSetLayoutCreateInfo {
                     flags: DescriptorSetLayoutCreateFlags::empty(),
-                    bindings: BTreeMap::new(),
+                    bindings: [].into(),
                     ..Default::default()
                 }
             },
@@ -155,13 +153,13 @@ fn main() {
                 // Objects
                 DescriptorSetLayoutCreateInfo {
                     flags: DescriptorSetLayoutCreateFlags::empty(),
-                    bindings: BTreeMap::from([
+                    bindings: [
                         (0, {
                             let mut binding = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
                             binding.stages = ShaderStages::VERTEX;
                             binding
                         })
-                    ]),
+                    ].into(),
                     ..Default::default()
                 }
             }
@@ -273,6 +271,7 @@ fn main() {
     let meshes: HashMap<&'static str, IndexedMesh> = [("hex", hex_mesh)].into();
 
     let start_time = Instant::now();
+    let mut dispatch_index: u32 = 0;
 
     let proxy = event_loop.create_proxy();
     event_loop.run(move |event, elwt| {
@@ -300,6 +299,7 @@ fn main() {
                         }.into(),
                         vec![
                             CirclesRenderPass {
+                                dispatch_index,
                                 elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
                                 pass_ubo: pass_ubo.clone(),
                                 obj_ubo: obj_ubo.clone(),
@@ -309,6 +309,7 @@ fn main() {
                         ]
                     );
 
+                    dispatch_index += 1;
                     let mut barrier = renderer.comms.send(rendersystem);
 
                     _ = proxy.send_event(GlobalEvent::Update);
@@ -328,6 +329,7 @@ fn main() {
                             }.into(),
                             vec![
                                 CirclesRenderPass {
+                                    dispatch_index,
                                     elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
                                     pass_ubo: pass_ubo.clone(),
                                     obj_ubo: obj_ubo.clone(),
@@ -337,6 +339,7 @@ fn main() {
                             ]
                         );
 
+                        dispatch_index += 1;
                         renderer.comms.send(rendersystem)
                     })
                     .collect();
