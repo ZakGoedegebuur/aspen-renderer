@@ -7,7 +7,7 @@ use vulkano::{
     buffer::{
         allocator::SubbufferAllocator, 
         BufferContents
-    }, command_buffer::RenderPassBeginInfo, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}, padded::Padded, pipeline::{
+    }, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}, padded::Padded, pipeline::{
         graphics::viewport::Viewport, GraphicsPipeline, Pipeline, PipelineBindPoint
     }
 };
@@ -31,9 +31,7 @@ impl RenderPass for CirclesRenderPass {
     type Output = ();
 
     fn preprocess(&mut self, gfx_obj: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>) -> Result<Self::PreProcessed, aspen_renderer::renderpass::HaltPolicy> {
-        //println!("shared.image_extent:\n{:#?}\nself.canvas.extent():\n{:#?}", shared.image_extent, self.canvas.extent());
         if shared.image_extent != self.canvas.extent() {
-            //println!("woo");
             self.canvas.recreate_buffers_exact(
                 [
                     shared.image_extent[0], 
@@ -168,9 +166,15 @@ impl RenderPass for CirclesRenderPass {
 
         let mesh = self.meshes.get("hex").unwrap();
 
-        //let window = shared.window.lock().unwrap();
+        let mut pass_controller = self.canvas.pass_controller();
 
-        let pass_controller = self.canvas.begin_renderpass(cmd_buffer).unwrap();
+        pass_controller.begin_renderpass(
+            cmd_buffer, 
+            [
+                Some([0.2; 3].into()), 
+                Some(1.0.into())
+            ].into()
+        ).unwrap();
 
         cmd_buffer
             .set_viewport(0, [
@@ -209,7 +213,7 @@ impl RenderPass for CirclesRenderPass {
             //.end_render_pass(Default::default())
             //.unwrap();
 
-            pass_controller.end(cmd_buffer).unwrap();
+            pass_controller.end_renderpass(cmd_buffer).unwrap();
 
         Ok(())
     }

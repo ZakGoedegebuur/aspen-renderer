@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    canvas::Canvas, renderpass::RenderPassCont, submit_system::{DynamicSubmitSystem, SubmitSystem, SubmitSystemCont}, GraphicsObjects
+    renderpass::RenderPassCont, submit_system::{DynamicSubmitSystem, SubmitSystem, SubmitSystemCont}, window_surface::WindowSurface, GraphicsObjects
 };
 
 pub trait RenderSystem {
@@ -54,6 +54,10 @@ impl<SST: SubmitSystem> RenderSystem for DefaultRenderSystem<SST> {
     }
 }
 
-pub struct UnifiedRenderSystem {
-    pub target: Arc<Canvas>
+pub enum UnifiedRenderSystem {
+    Windowed(WindowedRenderSystem)
+}
+
+pub struct WindowedRenderSystem {
+    target_window: Arc<WindowSurface>,
 }

@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use vulkano::{command_buffer::RenderPassBeginInfo, image::{view::ImageView, Image, ImageCreateInfo}, memory::allocator::{AllocationCreateInfo, MemoryAllocator}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, ValidationError, VulkanError};
+use vulkano::{command_buffer::RenderPassBeginInfo, format::ClearValue, image::{view::ImageView, Image, ImageCreateInfo}, memory::allocator::{AllocationCreateInfo, MemoryAllocator}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, ValidationError};
 
 use crate::renderpass::CmdBuffer;
 
@@ -57,49 +57,77 @@ impl Canvas {
         inner.recreate_buffers_exact(exact_extent, num_frames_in_flight, allocator);
     }
 
-    pub fn begin_renderpass(self: &Arc<Self>, cmd_buf: &mut CmdBuffer) -> Result<RenderPassController, Box<vulkano::ValidationError>> {
+    pub fn pass_controller(self: &Arc<Self>) -> RenderPassController {
         let mut inner = self.inner.lock().unwrap();
         inner.current_set += 1;
         inner.current_set %= inner.num_frames_in_flight;
-        match cmd_buf.begin_render_pass(
-            RenderPassBeginInfo {
-                clear_values: vec![Some([0.07, 0.07, 0.07, 1.0].into()), Some(1.0.into())],
-                ..RenderPassBeginInfo::framebuffer(
-                    inner.framebuffers[inner.current_set].clone()
-                )
-            },
-            Default::default(),
-        ) {
-            Ok(_) => {
-                Ok(
-                    RenderPassController {
-                        current_subpass: 0
-                    }
-                )
-            },
-            Err(err) => Err(err)
+
+        RenderPassController {
+            current_subpass: None,
+            image_views: inner.image_sets[inner.current_set].clone(),
+            framebuffer: inner.framebuffers[inner.current_set].clone()
         }
     }
 }
 
 pub struct RenderPassController {
-    current_subpass: usize,
+    current_subpass: Option<usize>,
+    pub framebuffer: Arc<Framebuffer>,
+    pub image_views: Vec<Arc<ImageView>>
 }
 
 impl RenderPassController {
-    pub fn next_subpass(&mut self, cmd_buf: &mut CmdBuffer) -> Result<(), Box<ValidationError>> {
-        self.current_subpass += 1;
-        match cmd_buf.next_subpass(Default::default(), Default::default()) {
-            Ok(_) => Ok(()),
+    pub fn begin_renderpass<'a>(
+        &'a mut self, 
+        cmd_buf: &'a mut CmdBuffer, 
+        clear_values: Vec<Option<ClearValue>>
+    ) -> Result<&mut CmdBuffer, Box<ValidationError>> {
+        match cmd_buf.begin_render_pass(
+            RenderPassBeginInfo {
+                clear_values,
+                ..RenderPassBeginInfo::framebuffer(self.framebuffer.clone())
+            }, 
+            Default::default()
+        ) {
+            Ok(val) => {
+                self.current_subpass = Some(0);
+                Ok(val)
+            }
             Err(err) => Err(err)
         }
     }
 
-    pub fn end(self, cmd_buf: &mut CmdBuffer) -> Result<(), Box<ValidationError>> {
-        match cmd_buf.end_render_pass(Default::default()) {
-            Ok(_) => Ok(()),
+    pub fn begin_renderpass_with_extent<'a>(
+        &'a mut self, 
+        cmd_buf: &'a mut CmdBuffer, 
+        clear_values: Vec<Option<ClearValue>>,
+        extent: [u32; 2],
+        offset: [u32; 2]
+    ) -> Result<&mut CmdBuffer, Box<ValidationError>> {
+        match cmd_buf.begin_render_pass(
+            RenderPassBeginInfo {
+                clear_values,
+                render_area_extent: extent,
+                render_area_offset: offset,
+                ..RenderPassBeginInfo::framebuffer(self.framebuffer.clone())
+            }, 
+            Default::default()
+        ) {
+            Ok(val) => {
+                self.current_subpass = Some(0);
+                Ok(val)
+            }
             Err(err) => Err(err)
         }
+    }
+
+    pub fn next_subpass<'a>(&'a mut self, cmd_buf: &'a mut CmdBuffer) -> Result<&mut CmdBuffer, Box<ValidationError>> {
+        *self.current_subpass.as_mut().expect("renderpass not active") += 1;
+        cmd_buf.next_subpass(Default::default(), Default::default())
+    }
+
+    pub fn end_renderpass(self, cmd_buf: &mut CmdBuffer) -> Result<&mut CmdBuffer, Box<ValidationError>> {
+        cmd_buf.end_render_pass(Default::default())
     }
 }
 
