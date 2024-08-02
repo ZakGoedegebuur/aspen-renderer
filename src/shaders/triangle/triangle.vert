@@ -26,7 +26,8 @@ void main() {
 
     mat4 worldview = per_pass_0.view * objects_0.objects[index].mat;
     //v_normal = transpose(inverse(mat3(worldview))) * normal;
-    gl_Position = per_pass_0.proj * worldview * vec4(pos, 0.0, 1.0);
+    vec4 position = per_pass_0.proj * worldview * vec4(pos, 0.0, 1.0);
+    gl_Position = position;
     
     o_color = color + objects_0.objects[index].color_offset;
 }  

@@ -3,6 +3,7 @@ pub mod drawable;
 pub mod renderpass;
 pub mod submit_system;
 pub mod render_system;
+pub mod canvas;
 
 use std::{
     collections::HashMap, 
@@ -66,11 +67,12 @@ use winit::{
 
 #[derive(Clone)]
 pub struct GraphicsObjects {
+    pub num_frames_in_flight: usize,
     pub device: Arc<Device>,
     pub graphics_queue: Arc<Queue>,
     pub descriptor_set_allocator: Arc<StandardDescriptorSetAllocator>,
     pub command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
-    pub memory_allocator: Arc<StandardMemoryAllocator>
+    pub memory_allocator: Arc<StandardMemoryAllocator>,
 }
 
 pub struct Renderer {
@@ -150,6 +152,7 @@ impl Renderer {
             DeviceCreateInfo {
                 enabled_extensions: device_extensions,
                 enabled_features: Features {
+                    fill_mode_non_solid: true,
                     ..Default::default()
                 },
                 queue_create_infos: vec![QueueCreateInfo {
@@ -163,26 +166,28 @@ impl Renderer {
 
         let queue = queues.next().unwrap();
 
+        let surface_capabilities = device
+            .physical_device()
+            .surface_capabilities(&surface, Default::default())
+            .unwrap();
+
+        let num_frames_in_flight = surface_capabilities.min_image_count.max(2);
+
+        let surface_image_format = device
+            .physical_device()
+            .surface_formats(&surface, Default::default())
+            .unwrap()[0]
+            .0;
+
         let (swapchain, images) = {
-            let surface_capabilities = device
-                .physical_device()
-                .surface_capabilities(&surface, Default::default())
-                .unwrap();
-        
-            let image_format = device
-                .physical_device()
-                .surface_formats(&surface, Default::default())
-                .unwrap()[0]
-                .0;
-            
             Swapchain::new(
                 device.clone(),
                 surface,
                 SwapchainCreateInfo {
-                    min_image_count: surface_capabilities.min_image_count.max(2),
-                    image_format,
+                    min_image_count: num_frames_in_flight,
+                    image_format: surface_image_format,
                     image_extent: window.inner_size().into(),
-                    image_usage: ImageUsage::COLOR_ATTACHMENT,
+                    image_usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST,
                     composite_alpha: surface_capabilities
                     .supported_composite_alpha
                     .into_iter()
@@ -194,23 +199,6 @@ impl Renderer {
             ).unwrap()
         };
 
-        let renderpass = vulkano::single_pass_renderpass!(
-            device.clone(),
-            attachments: {
-                color: {
-                    format: swapchain.image_format(),
-                    samples: 1,
-                    load_op: Clear,
-                    store_op: Store,
-                },
-            },
-            pass: {
-                color: [color],
-                depth_stencil: {},
-            },
-        )
-        .unwrap();
-
         let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
 
         let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(
@@ -218,13 +206,7 @@ impl Renderer {
             Default::default()
         ));
 
-        let mut viewport = Viewport {
-            offset: [0.0, 0.0],
-            extent: [0.0, 0.0],
-            depth_range: 0.0..=1.0,
-        };
-
-        let framebuffers = window_size_dependent_setup(&images, renderpass.clone(), &mut viewport);
+        //let framebuffers = window_size_dependent_setup(&images, renderpass.clone(), &mut viewport);
         let previous_frame_fences = (0..images.len())
             .map(|_| { None })
             .collect::<Vec<_>>();
@@ -244,12 +226,13 @@ impl Renderer {
                         window,
                         swapchain,
                         images,
-                        framebuffers,
-                        renderpass: renderpass.clone(),
-                        viewport,
+                        framebuffers: Vec::new(),
+                        //viewport,
                         recreate_swapchain: true,
                         previous_frame_fences,
-                        previous_frame_index: 0
+                        num_frames_in_flight: 0,
+                        previous_frame_index: 0,
+                        surface_image_format,
                     }
                 )
             )
@@ -259,6 +242,7 @@ impl Renderer {
         //windows.insert(window_2.window.id(), Arc::new(Mutex::new(window_2)));
 
         let graphics_objects_original = GraphicsObjects {
+            num_frames_in_flight: num_frames_in_flight as usize,
             device: device.clone(),
             graphics_queue: queue.clone(),
             descriptor_set_allocator: descriptor_set_allocator.clone(),

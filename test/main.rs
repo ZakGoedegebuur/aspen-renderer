@@ -1,9 +1,9 @@
 use std::{collections::HashMap, io::Read, sync::{Arc, Mutex}, time::Instant};
 
-use aspen_renderer::{render_system::DefaultRenderSystem, Renderer};
-use passes::{circles::CirclesRenderPass, present::PresentSystem};
+use aspen_renderer::{canvas::Canvas, render_system::DefaultRenderSystem, Renderer};
+use passes::{window_blit::WindowBlitRenderPass, circles::CirclesRenderPass, present::PresentSystem};
 use vulkano::{
-    buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, format::Format, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, RasterizationState}, vertex_input::{Vertex, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, VertexInputState}, viewport::ViewportState, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::Subpass, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}};
+    buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, format::Format, image::{ImageCreateInfo, ImageType, ImageUsage}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, depth_stencil::{DepthState, DepthStencilState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, RasterizationState}, vertex_input::{Vertex, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputState}, viewport::ViewportState, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::Subpass, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}};
 use winit::{
     event::{
         Event, 
@@ -43,13 +43,12 @@ enum GlobalEvent {
     Update,
 }
 
-
 fn main() {
-    //std::env::set_var("RUST_BACKTRACE", "1");``
+    //std::env::set_var("RUST_BACKTRACE", "1");
     
     let event_loop = EventLoopBuilder::<GlobalEvent>::with_user_event().build().unwrap();
 
-    let (mut renderer, main_window_id) = Renderer::new(&event_loop);
+    let (mut renderer, _main_window_id) = Renderer::new(&event_loop);
 
     let pass_ubo = Arc::new(Mutex::new(SubbufferAllocator::new(
         renderer.allocator().clone(), 
@@ -68,6 +67,52 @@ fn main() {
             ..Default::default()
         }
     )));
+
+    //let (surface_format, num_frames_in_flight) = {
+    //    let guard = renderer.windows.get(&main_window_id).unwrap().lock().unwrap();
+    //    (guard.surface_image_format, guard.num_frames_in_flight)
+    //};
+
+    let renderpass = vulkano::single_pass_renderpass!(
+        renderer.device().clone(),
+        attachments: {
+            color: {
+                format: Format::R8G8B8A8_SRGB,
+                samples: 1,
+                load_op: Clear,
+                store_op: Store,
+            },
+            depth: {
+                format: Format::D32_SFLOAT,
+                samples: 1,
+                load_op: Clear,
+                store_op: DontCare,
+            }
+        },
+        pass: {
+            color: [color],
+            depth_stencil: {depth},
+        },
+    )
+    .unwrap();
+
+    let canvas = Canvas::empty(
+        renderpass.clone(), 
+        [
+            ImageCreateInfo {
+                image_type: ImageType::Dim2d,
+                format: Format::R8G8B8A8_SRGB,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_SRC,
+                ..Default::default()
+            },
+            ImageCreateInfo {
+                image_type: ImageType::Dim2d,
+                format: Format::D32_SFLOAT,
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
+                ..Default::default()
+            }
+        ].into()
+    );
 
     let pipeline = {
         let vs = {
@@ -92,21 +137,46 @@ fn main() {
             module.entry_point("main").unwrap()
         };
 
-        let vertex_input_state = VertexInputState::new()
-            .binding(0, VertexInputBindingDescription {
-                stride: std::mem::size_of::<PosColVertex>() as u32,
-                input_rate: VertexInputRate::Vertex
-            })
-            .attribute(0, VertexInputAttributeDescription {
-                binding: 0,
-                format: Format::R32G32_SFLOAT,
-                offset: std::mem::offset_of!(PosColVertex, position) as u32
-            })
-            .attribute(1, VertexInputAttributeDescription {
-                binding: 0,
-                format: Format::R32G32B32_SFLOAT,
-                offset: std::mem::offset_of!(PosColVertex, color) as u32
-            });
+        //let vertex_input_state = VertexInputState::new()
+        //    .binding(0, VertexInputBindingDescription {
+        //        stride: std::mem::size_of::<PosColVertex>() as u32,
+        //        input_rate: VertexInputRate::Vertex
+        //    })
+        //    .attribute(0, VertexInputAttributeDescription {
+        //        binding: 0,
+        //        format: Format::R32G32_SFLOAT,
+        //        offset: std::mem::offset_of!(PosColVertex, position) as u32
+        //    })
+        //    .attribute(1, VertexInputAttributeDescription {
+        //        binding: 0,
+        //        format: Format::R32G32B32_SFLOAT,
+        //        offset: std::mem::offset_of!(PosColVertex, color) as u32
+        //    });
+
+        let vertex_input_state = {
+            let info = PosColVertex::per_vertex();
+            let input_state = VertexInputState::new()
+                .binding(0, VertexInputBindingDescription {
+                    stride: info.stride,
+                    input_rate: info.input_rate
+                });
+
+            let mut members = info.members.iter().collect::<Vec<_>>();
+            members.sort_by_key(|(_, member)| { member.offset });
+            
+            let members = members.iter()
+                .enumerate()
+                .map(|(i, (_, member))| {
+                    //println!("member \"{}\" ({}):\n{:#?}", name, i, member);
+                    (i as u32, VertexInputAttributeDescription {
+                        binding: 0,
+                        format: member.format,
+                        offset: member.offset as u32
+                    })
+                });
+            
+            input_state.attributes(members)
+        };
 
         //let vertex_input_state = Vertex::per_vertex().definition(&vs.info().input_interface).unwrap();
 
@@ -175,12 +245,7 @@ fn main() {
         )
         .unwrap();
 
-        let renderpass = {
-            let guard = renderer.windows.get(&main_window_id).unwrap().lock().unwrap();
-            guard.renderpass.clone()
-        };
-
-        let subpass = Subpass::from(renderpass, 0).unwrap();
+        let subpass = Subpass::from(renderpass.clone(), 0).unwrap();
 
         GraphicsPipeline::new(
             renderer.device().clone(),
@@ -201,6 +266,10 @@ fn main() {
                     ColorBlendAttachmentState::default(),
                 )),
                 dynamic_state: [DynamicState::Viewport].into_iter().collect(),
+                depth_stencil_state: Some(DepthStencilState {
+                    depth: Some(DepthState::simple()),
+                    ..Default::default()
+                }),
                 subpass: Some(subpass.into()),
                 ..GraphicsPipelineCreateInfo::layout(layout)
             },
@@ -271,7 +340,6 @@ fn main() {
     let meshes: HashMap<&'static str, IndexedMesh> = [("hex", hex_mesh)].into();
 
     let start_time = Instant::now();
-    let mut dispatch_index: u32 = 0;
 
     let proxy = event_loop.create_proxy();
     event_loop.run(move |event, elwt| {
@@ -295,21 +363,24 @@ fn main() {
                 WindowEvent::RedrawRequested => {
                     let rendersystem = DefaultRenderSystem::new(
                         PresentSystem {
-                            window: renderer.windows.get(&window_id).unwrap().clone()
+                            window: renderer.windows.get(&window_id).unwrap().clone(),
                         }.into(),
                         vec![
                             CirclesRenderPass {
-                                dispatch_index,
                                 elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
                                 pass_ubo: pass_ubo.clone(),
                                 obj_ubo: obj_ubo.clone(),
                                 pipeline: pipeline.clone(),
-                                meshes: meshes.clone()
+                                meshes: meshes.clone(),
+                                canvas: canvas.clone(),
+                            }.into(),
+                            WindowBlitRenderPass {
+                                src_canvas: canvas.clone(),
+                                attachment_index: 0
                             }.into()
                         ]
                     );
 
-                    dispatch_index += 1;
                     let mut barrier = renderer.comms.send(rendersystem);
 
                     _ = proxy.send_event(GlobalEvent::Update);
@@ -325,21 +396,24 @@ fn main() {
                     .map(|(_, w)| {
                         let rendersystem = DefaultRenderSystem::new(
                             PresentSystem {
-                                window: w.clone()
+                                window: w.clone(),
                             }.into(),
                             vec![
                                 CirclesRenderPass {
-                                    dispatch_index,
                                     elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
                                     pass_ubo: pass_ubo.clone(),
                                     obj_ubo: obj_ubo.clone(),
                                     pipeline: pipeline.clone(),
-                                    meshes: meshes.clone()
+                                    meshes: meshes.clone(),
+                                    canvas: canvas.clone(),
+                                }.into(),
+                                WindowBlitRenderPass {
+                                    src_canvas: canvas.clone(),
+                                    attachment_index: 0
                                 }.into()
                             ]
                         );
 
-                        dispatch_index += 1;
                         renderer.comms.send(rendersystem)
                     })
                     .collect();

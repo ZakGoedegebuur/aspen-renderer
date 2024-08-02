@@ -14,40 +14,36 @@ use aspen_renderer::{
 
 use vulkano::{
     command_buffer::{
-        AutoCommandBufferBuilder, 
-        CommandBufferUsage
-    }, 
-    swapchain::{
+        AutoCommandBufferBuilder, CommandBufferUsage
+    }, swapchain::{
         acquire_next_image, 
         SwapchainAcquireFuture,
         SwapchainCreateInfo, 
         SwapchainPresentInfo
-    }, 
-    sync::GpuFuture, 
-    Validated, 
-    VulkanError
+    }, sync::GpuFuture, Validated, VulkanError
 };
 
 pub struct PresentSystem { 
-    pub window: Arc<Mutex<WindowSurface>>
-}
-
-pub struct PreProcessed {
-    image_index: u32,
-    acquire_future: SwapchainAcquireFuture
+    pub window: Arc<Mutex<WindowSurface>>,
+    //pub renderpass: Arc<RenderPass>
 }
 
 pub struct SharedInfo {
     pub window: Arc<Mutex<WindowSurface>>,
-    pub current_image_index: u32,
-    pub image_extent: [u32; 2]
+    pub num_frames_in_flight: usize,
+    pub image_index: usize,
+    pub image_extent: [u32; 2],
+}
+
+pub struct SetupData {
+    pub acquire_future: SwapchainAcquireFuture,
 }
 
 impl SubmitSystem for PresentSystem {
     type SharedType = SharedInfo;
-    type SetupType = PreProcessed;
+    type SetupType = SetupData;
 
-    fn setup(&mut self, graphics_objects: Arc<GraphicsObjects>) -> Result<(Self::SharedType, Self::SetupType, Box<CmdBuffer>), HaltPolicy> {
+    fn setup(&mut self, graphics_objects: Arc<GraphicsObjects>) -> Result<(Arc<Self::SharedType>, Self::SetupType, Box<CmdBuffer>), HaltPolicy> {
         let mut window = self.window.lock().unwrap();
         let image_extent: [u32; 2] = window.window.inner_size().into();
         
@@ -71,10 +67,10 @@ impl SubmitSystem for PresentSystem {
             .expect("failed to recreate swapchain");
 
             window.swapchain = new_swapchain;
-
             window.images = new_images;
-            let render_pass = window.framebuffers[0].render_pass().clone();
-            window.image_size_dependent_setup(render_pass);
+            window.num_frames_in_flight = window.images.len();
+            //let render_pass = self.renderpass.clone();
+            //window.image_size_dependent_setup(render_pass);
             window.recreate_swapchain = false;
         }
 
@@ -99,24 +95,30 @@ impl SubmitSystem for PresentSystem {
         ).unwrap());
 
         Ok((
-            SharedInfo {
+            Arc::new(SharedInfo {
                 window: self.window.clone(),
-                current_image_index: image_index,
-                image_extent,
-            },
-            PreProcessed {
-                image_index,
-                acquire_future
+                num_frames_in_flight: window.num_frames_in_flight,
+                image_index: image_index as usize,
+                image_extent: [image_extent[0], image_extent[1]],
+            }),
+            SetupData {
+                acquire_future,
             },
             builder
         ))
     }
 
-    fn submit(&mut self, graphics_objects: Arc<GraphicsObjects>, cmd_buffer: Box<CmdBuffer>, setup_data: Self::SetupType) {
+    fn submit(&mut self, graphics_objects: Arc<GraphicsObjects>, cmd_buffer: Box<CmdBuffer>, setup_data: Self::SetupType, shared: Arc<Self::SharedType>) {
         let mut window = self.window.lock().unwrap();
+
+        //cmd_buffer.blit_image(
+        //    BlitImageInfo::images(shared.final_image.lock().unwrap().as_ref().unwrap().clone(), window.images[shared.image_index].clone())
+        //).unwrap();
+
+
         let command_buffer = cmd_buffer.build().unwrap();
 
-        let previous_future = match window.previous_frame_fences[setup_data.image_index as usize].clone() {
+        let previous_future = match window.previous_frame_fences[shared.image_index].clone() {
             None => {
                 let mut now = vulkano::sync::now(graphics_objects.device.clone());
                 now.cleanup_finished();
@@ -135,12 +137,12 @@ impl SubmitSystem for PresentSystem {
             .unwrap()
             .then_swapchain_present(
                 graphics_objects.graphics_queue.clone(), 
-                SwapchainPresentInfo::swapchain_image_index(window.swapchain.clone(), setup_data.image_index)
+                SwapchainPresentInfo::swapchain_image_index(window.swapchain.clone(), shared.image_index as u32)
             )
             .boxed_send()
             .then_signal_fence_and_flush();
 
-        window.previous_frame_fences[setup_data.image_index as usize] = match future.map_err(Validated::unwrap) {
+        window.previous_frame_fences[shared.image_index] = match future.map_err(Validated::unwrap) {
             Ok(value) => Some(Arc::new(value)),
             Err(VulkanError::OutOfDate) => {
                 let winextent = window.window.inner_size();
@@ -154,6 +156,6 @@ impl SubmitSystem for PresentSystem {
             }
         };
 
-        window.previous_frame_index = setup_data.image_index;
+        window.previous_frame_index = shared.image_index;
     }
 }

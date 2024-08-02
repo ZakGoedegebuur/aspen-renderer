@@ -1,14 +1,14 @@
 use core::f32;
 use std::{collections::HashMap, sync::{Arc, Mutex}};
 
-use aspen_renderer::{renderpass::{CmdBuffer, RenderPass}, GraphicsObjects};
+use aspen_renderer::{canvas::Canvas, renderpass::{CmdBuffer, RenderPass}, GraphicsObjects};
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, Rotation3, UnitVector3, Vector3};
 use vulkano::{
     buffer::{
         allocator::SubbufferAllocator, 
         BufferContents
     }, command_buffer::RenderPassBeginInfo, descriptor_set::{PersistentDescriptorSet, WriteDescriptorSet}, padded::Padded, pipeline::{
-        GraphicsPipeline, Pipeline, PipelineBindPoint
+        graphics::viewport::Viewport, GraphicsPipeline, Pipeline, PipelineBindPoint
     }
 };
 
@@ -17,12 +17,12 @@ use crate::IndexedMesh;
 use super::present::SharedInfo;
 
 pub struct CirclesRenderPass {
-    pub dispatch_index: u32,
     pub elapsed_time: f32,
     pub pass_ubo: Arc<Mutex<SubbufferAllocator>>,
     pub obj_ubo: Arc<Mutex<SubbufferAllocator>>,
     pub pipeline: Arc<GraphicsPipeline>,
-    pub meshes: HashMap<&'static str, IndexedMesh>
+    pub meshes: HashMap<&'static str, IndexedMesh>,
+    pub canvas: Arc<Canvas>,
 }
 
 impl RenderPass for CirclesRenderPass {
@@ -30,7 +30,21 @@ impl RenderPass for CirclesRenderPass {
     type PreProcessed = ();
     type Output = ();
 
-    fn preprocess(&mut self, _: Arc<GraphicsObjects>, _: Arc<Self::SharedData>) -> Result<Self::PreProcessed, aspen_renderer::renderpass::HaltPolicy> {
+    fn preprocess(&mut self, gfx_obj: Arc<GraphicsObjects>, shared: Arc<Self::SharedData>) -> Result<Self::PreProcessed, aspen_renderer::renderpass::HaltPolicy> {
+        //println!("shared.image_extent:\n{:#?}\nself.canvas.extent():\n{:#?}", shared.image_extent, self.canvas.extent());
+        if shared.image_extent != self.canvas.extent() {
+            //println!("woo");
+            self.canvas.recreate_buffers_exact(
+                [
+                    shared.image_extent[0], 
+                    shared.image_extent[1], 
+                    1
+                ], 
+                shared.num_frames_in_flight, 
+                gfx_obj.memory_allocator.clone()
+            )
+        }
+
         Ok(())
     }
 
@@ -60,7 +74,7 @@ impl RenderPass for CirclesRenderPass {
         let aspect_ratio = shared.image_extent[0] as f32 / shared.image_extent[1] as f32;
 
         let view = Isometry3::look_at_rh(
-            &Point3::new(5.0, 5.0, 5.0),
+            &Point3::new(1.5, 0.0, -9.0),
             &Point3::new(0.0, 0.0, 0.0),
             &Vector3::new(0.0, -1.0, 0.0),
         );
@@ -81,36 +95,36 @@ impl RenderPass for CirclesRenderPass {
             per_object: [
                 UBOPerObject {
                     mat: {
-                        let mut mat = Matrix4::new_scaling(2.0);
+                        let mut mat = Matrix4::new_scaling(3.0);
                         mat = mat.append_translation(&Vector3::new(0.0 - (elapsed_time + (3.141 * 0.0)).sin() * 5.0, -0.0, 0.0));
-                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
+                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(-Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
                         (mat * rotation.to_homogeneous()).as_slice().try_into().unwrap()
                     },
                     color_offset: Padded([0.3, 1.0, 0.5])
                 },
                 UBOPerObject {
                     mat: {
-                        let mut mat = Matrix4::new_scaling(2.0);
-                        mat = mat.append_translation(&Vector3::new(0.0, 0.0 + (elapsed_time + (3.141 * 0.25)).sin() * 5.0, 0.0));
-                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
+                        let mut mat = Matrix4::new_scaling(3.0);
+                        mat = mat.append_translation(&Vector3::new(0.0, 0.0 + (elapsed_time + (3.141 * 0.25)).sin() * 5.0, 3.0));
+                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(-Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
                         (mat * rotation.to_homogeneous()).as_slice().try_into().unwrap()
                     },
                     color_offset: Padded([1.0, 0.2, 0.5])
                 },
                 UBOPerObject {
                     mat: {
-                        let mut mat = Matrix4::new_scaling(2.0);
-                        mat = mat.append_translation(&Vector3::new(0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0));
-                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
+                        let mut mat = Matrix4::new_scaling(3.0);
+                        mat = mat.append_translation(&Vector3::new(0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 0.0 + (elapsed_time + (3.141 * 0.5)).sin() * 5.0, 6.0));
+                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(-Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
                         (mat * rotation.to_homogeneous()).as_slice().try_into().unwrap()
                     },
                     color_offset: Padded([0.3, 0.5, 1.0])
                 },
                 UBOPerObject {
                     mat: {
-                        let mut mat = Matrix4::new_scaling(2.0);
-                        mat = mat.append_translation(&Vector3::new(0.0 + (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0 - (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0));
-                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
+                        let mut mat = Matrix4::new_scaling(3.0);
+                        mat = mat.append_translation(&Vector3::new(0.0 + (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 0.0 - (elapsed_time + (3.141 * 0.75)).sin() * 5.0, 9.0));
+                        let rotation = Rotation3::from_axis_angle(&UnitVector3::new_normalize(-Vector3::z()), elapsed_time % (f32::consts::PI * 2.0));
                         (mat * rotation.to_homogeneous()).as_slice().try_into().unwrap()
                     },
                     color_offset: Padded([1.0, 0.5, 0.2])
@@ -154,20 +168,21 @@ impl RenderPass for CirclesRenderPass {
 
         let mesh = self.meshes.get("hex").unwrap();
 
-        let window = shared.window.lock().unwrap();
+        //let window = shared.window.lock().unwrap();
+
+        let pass_controller = self.canvas.begin_renderpass(cmd_buffer).unwrap();
 
         cmd_buffer
-            .begin_render_pass(
-                RenderPassBeginInfo {
-                    clear_values: vec![Some([0.07, 0.07, 0.07, 1.0].into())],
-                    ..RenderPassBeginInfo::framebuffer(
-                        window.framebuffers[shared.current_image_index as usize].clone(),
-                    )
-                },
-                Default::default(),
-            )
-            .unwrap()
-            .set_viewport(0, [window.viewport.clone()].into_iter().collect())
+            .set_viewport(0, [
+                Viewport {
+                    offset: [0.0, 0.0],
+                    extent: {
+                        //let extent = window.images[shared.image_index as usize].extent();
+                        [shared.image_extent[0] as f32, shared.image_extent[1] as f32]
+                    },
+                    depth_range: 0.0..=1.0
+                }
+            ].into_iter().collect())
             .unwrap()
             .bind_descriptor_sets(
                 PipelineBindPoint::Graphics, 
@@ -190,9 +205,11 @@ impl RenderPass for CirclesRenderPass {
             )
             .unwrap()
             .draw_indexed(mesh.ibo.len() as u32, 4, 0, 0, 0)
-            .unwrap()
-            .end_render_pass(Default::default())
             .unwrap();
+            //.end_render_pass(Default::default())
+            //.unwrap();
+
+            pass_controller.end(cmd_buffer).unwrap();
 
         Ok(())
     }

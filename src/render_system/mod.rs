@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    renderpass::RenderPassCont, 
-    submit_system::{DynamicSubmitSystem, SubmitSystem, SubmitSystemCont}, 
-    GraphicsObjects
+    canvas::Canvas, renderpass::RenderPassCont, submit_system::{DynamicSubmitSystem, SubmitSystem, SubmitSystemCont}, GraphicsObjects
 };
 
 pub trait RenderSystem {
@@ -34,8 +32,6 @@ impl<SST: SubmitSystem> RenderSystem for DefaultRenderSystem<SST> {
             Err(_) => return
         };
 
-        let shared = Arc::new(shared);
-
         for pass in self.render_passes.iter_mut() {
             match pass.preprocess(graphics_objects.clone(), shared.clone()) {
                 Ok(_) => (),
@@ -49,11 +45,15 @@ impl<SST: SubmitSystem> RenderSystem for DefaultRenderSystem<SST> {
                 Err(_) => return
             }
         }
-
+        
         for pass in self.render_passes.iter_mut() {
             pass.postprocess(graphics_objects.clone(), shared.clone());
         }
 
-        self.submit_system.submit(graphics_objects.clone(), cmd_buf)
+        self.submit_system.submit(graphics_objects.clone(), cmd_buf, shared)
     }
+}
+
+pub struct UnifiedRenderSystem {
+    pub target: Arc<Canvas>
 }
