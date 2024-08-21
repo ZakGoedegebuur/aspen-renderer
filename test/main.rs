@@ -1,18 +1,102 @@
-use std::{collections::HashMap, io::Read, sync::{Arc, Mutex}, time::Instant};
+use std::{
+    collections::HashMap,
+    io::Read,
+    sync::{
+        Arc,
+        Mutex,
+    },
+    time::Instant,
+};
 
-use aspen_renderer::{canvas::Canvas, render_system::DefaultRenderSystem, Renderer};
-use passes::{window_blit::WindowBlitRenderPass, circles::CirclesRenderPass, present::PresentSystem};
+use aspen_renderer::{
+    canvas::Canvas,
+    render_system::DefaultRenderSystem,
+    Renderer,
+};
+use passes::{
+    circles::CirclesRenderPass,
+    present::PresentSystem,
+    window_blit::WindowBlitRenderPass,
+};
 use vulkano::{
-    buffer::{allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo}, Buffer, BufferContents, BufferCreateInfo, BufferUsage, Subbuffer}, descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, DescriptorType}, format::Format, image::{ImageCreateInfo, ImageType, ImageUsage}, memory::allocator::{AllocationCreateInfo, MemoryTypeFilter}, pipeline::{graphics::{color_blend::{ColorBlendAttachmentState, ColorBlendState}, depth_stencil::{DepthState, DepthStencilState}, input_assembly::InputAssemblyState, multisample::MultisampleState, rasterization::{CullMode, FrontFace, RasterizationState}, vertex_input::{Vertex, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputState}, viewport::ViewportState, GraphicsPipelineCreateInfo}, layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags}, DynamicState, GraphicsPipeline, PipelineLayout, PipelineShaderStageCreateInfo}, render_pass::Subpass, shader::{ShaderModule, ShaderModuleCreateInfo, ShaderStages}};
+    buffer::{
+        allocator::{
+            SubbufferAllocator,
+            SubbufferAllocatorCreateInfo,
+        },
+        Buffer,
+        BufferContents,
+        BufferCreateInfo,
+        BufferUsage,
+        Subbuffer,
+    },
+    descriptor_set::layout::{
+        DescriptorSetLayoutBinding,
+        DescriptorSetLayoutCreateFlags,
+        DescriptorSetLayoutCreateInfo,
+        DescriptorType,
+    },
+    format::Format,
+    image::{
+        ImageCreateInfo,
+        ImageType,
+        ImageUsage,
+    },
+    memory::allocator::{
+        AllocationCreateInfo,
+        MemoryTypeFilter,
+    },
+    pipeline::{
+        graphics::{
+            color_blend::{
+                ColorBlendAttachmentState,
+                ColorBlendState,
+            },
+            depth_stencil::{
+                DepthState,
+                DepthStencilState,
+            },
+            input_assembly::InputAssemblyState,
+            multisample::MultisampleState,
+            rasterization::{
+                CullMode,
+                FrontFace,
+                RasterizationState,
+            },
+            vertex_input::{
+                Vertex,
+                VertexInputAttributeDescription,
+                VertexInputBindingDescription,
+                VertexInputState,
+            },
+            viewport::ViewportState,
+            GraphicsPipelineCreateInfo,
+        },
+        layout::{
+            PipelineDescriptorSetLayoutCreateInfo,
+            PipelineLayoutCreateFlags,
+        },
+        DynamicState,
+        GraphicsPipeline,
+        PipelineLayout,
+        PipelineShaderStageCreateInfo,
+    },
+    render_pass::Subpass,
+    shader::{
+        ShaderModule,
+        ShaderModuleCreateInfo,
+        ShaderStages,
+    },
+};
 use winit::{
     event::{
-        Event, 
-        WindowEvent
-    }, 
+        Event,
+        WindowEvent,
+    },
     event_loop::{
-        ControlFlow, 
-        EventLoopBuilder
-    }
+        ControlFlow,
+        EventLoopBuilder,
+    },
 };
 
 mod passes;
@@ -21,7 +105,7 @@ pub struct RenderData {
     pub elapsed_time: f32,
     pub ubo: Arc<Mutex<SubbufferAllocator>>,
     pub pipeline: Arc<GraphicsPipeline>,
-    pub meshes: HashMap<&'static str, IndexedMesh>
+    pub meshes: HashMap<&'static str, IndexedMesh>,
 }
 
 #[derive(Debug, BufferContents, Vertex)]
@@ -36,7 +120,7 @@ pub struct PosColVertex {
 #[derive(Clone)]
 pub struct IndexedMesh {
     pub vbo: Subbuffer<[PosColVertex]>,
-    pub ibo: Subbuffer<[u32]>
+    pub ibo: Subbuffer<[u32]>,
 }
 
 enum GlobalEvent {
@@ -45,27 +129,31 @@ enum GlobalEvent {
 
 fn main() {
     //std::env::set_var("RUST_BACKTRACE", "1");
-    
-    let event_loop = EventLoopBuilder::<GlobalEvent>::with_user_event().build().unwrap();
+
+    let event_loop = EventLoopBuilder::<GlobalEvent>::with_user_event()
+        .build()
+        .unwrap();
 
     let (mut renderer, _main_window_id) = Renderer::new(&event_loop);
 
     let pass_ubo = Arc::new(Mutex::new(SubbufferAllocator::new(
-        renderer.allocator().clone(), 
+        renderer.allocator().clone(),
         SubbufferAllocatorCreateInfo {
             buffer_usage: BufferUsage::UNIFORM_BUFFER,
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
-        }
+        },
     )));
 
     let obj_ubo = Arc::new(Mutex::new(SubbufferAllocator::new(
-        renderer.allocator().clone(), 
+        renderer.allocator().clone(),
         SubbufferAllocatorCreateInfo {
             buffer_usage: BufferUsage::UNIFORM_BUFFER,
-            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+            memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
-        }
+        },
     )));
 
     //let (surface_format, num_frames_in_flight) = {
@@ -97,7 +185,7 @@ fn main() {
     .unwrap();
 
     let canvas = Canvas::empty(
-        renderpass.clone(), 
+        renderpass.clone(),
         [
             ImageCreateInfo {
                 image_type: ImageType::Dim2d,
@@ -110,8 +198,9 @@ fn main() {
                 format: Format::D32_SFLOAT,
                 usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
                 ..Default::default()
-            }
-        ].into()
+            },
+        ]
+        .into(),
     );
 
     let pipeline = {
@@ -119,10 +208,16 @@ fn main() {
             let mut bytes = Vec::new();
             let mut file = std::fs::File::open("src/shaders/triangle/triangle.vert.spv").unwrap();
             file.read_to_end(&mut bytes).unwrap();
-            let spirv: Vec<u32> = vulkano::shader::spirv::bytes_to_words(&bytes).unwrap().into_owned();
+            let spirv: Vec<u32> = vulkano::shader::spirv::bytes_to_words(&bytes)
+                .unwrap()
+                .into_owned();
             let module = unsafe {
-                ShaderModule::new(renderer.device().clone(), ShaderModuleCreateInfo::new(&spirv))
-            }.unwrap();
+                ShaderModule::new(
+                    renderer.device().clone(),
+                    ShaderModuleCreateInfo::new(&spirv),
+                )
+            }
+            .unwrap();
             module.entry_point("main").unwrap()
         };
 
@@ -130,10 +225,16 @@ fn main() {
             let mut bytes = Vec::new();
             let mut file = std::fs::File::open("src/shaders/triangle/triangle.frag.spv").unwrap();
             file.read_to_end(&mut bytes).unwrap();
-            let spirv: Vec<u32> = vulkano::shader::spirv::bytes_to_words(&bytes).unwrap().into_owned();
+            let spirv: Vec<u32> = vulkano::shader::spirv::bytes_to_words(&bytes)
+                .unwrap()
+                .into_owned();
             let module = unsafe {
-                ShaderModule::new(renderer.device().clone(), ShaderModuleCreateInfo::new(&spirv))
-            }.unwrap();
+                ShaderModule::new(
+                    renderer.device().clone(),
+                    ShaderModuleCreateInfo::new(&spirv),
+                )
+            }
+            .unwrap();
             module.entry_point("main").unwrap()
         };
 
@@ -155,26 +256,29 @@ fn main() {
 
         let vertex_input_state = {
             let info = PosColVertex::per_vertex();
-            let input_state = VertexInputState::new()
-                .binding(0, VertexInputBindingDescription {
+            let input_state = VertexInputState::new().binding(
+                0,
+                VertexInputBindingDescription {
                     stride: info.stride,
-                    input_rate: info.input_rate
-                });
+                    input_rate: info.input_rate,
+                },
+            );
 
             let mut members = info.members.iter().collect::<Vec<_>>();
-            members.sort_by_key(|(_, member)| { member.offset });
-            
-            let members = members.iter()
-                .enumerate()
-                .map(|(i, (_, member))| {
-                    //println!("member \"{}\" ({}):\n{:#?}", name, i, member);
-                    (i as u32, VertexInputAttributeDescription {
+            members.sort_by_key(|(_, member)| member.offset);
+
+            let members = members.iter().enumerate().map(|(i, (_, member))| {
+                //println!("member \"{}\" ({}):\n{:#?}", name, i, member);
+                (
+                    i as u32,
+                    VertexInputAttributeDescription {
                         binding: 0,
                         format: member.format,
-                        offset: member.offset as u32
-                    })
-                });
-            
+                        offset: member.offset as u32,
+                    },
+                )
+            });
+
             input_state.attributes(members)
         };
 
@@ -201,13 +305,14 @@ fn main() {
                 // Per pass
                 DescriptorSetLayoutCreateInfo {
                     flags: DescriptorSetLayoutCreateFlags::empty(),
-                    bindings: [
-                        (0, {
-                            let mut binding = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
-                            binding.stages = ShaderStages::VERTEX;
-                            binding
-                        })
-                    ].into(),
+                    bindings: [(0, {
+                        let mut binding = DescriptorSetLayoutBinding::descriptor_type(
+                            DescriptorType::UniformBuffer,
+                        );
+                        binding.stages = ShaderStages::VERTEX;
+                        binding
+                    })]
+                    .into(),
                     ..Default::default()
                 }
             },
@@ -223,16 +328,17 @@ fn main() {
                 // Objects
                 DescriptorSetLayoutCreateInfo {
                     flags: DescriptorSetLayoutCreateFlags::empty(),
-                    bindings: [
-                        (0, {
-                            let mut binding = DescriptorSetLayoutBinding::descriptor_type(DescriptorType::UniformBuffer);
-                            binding.stages = ShaderStages::VERTEX;
-                            binding
-                        })
-                    ].into(),
+                    bindings: [(0, {
+                        let mut binding = DescriptorSetLayoutBinding::descriptor_type(
+                            DescriptorType::UniformBuffer,
+                        );
+                        binding.stages = ShaderStages::VERTEX;
+                        binding
+                    })]
+                    .into(),
                     ..Default::default()
                 }
-            }
+            },
         ];
 
         let layout = PipelineLayout::new(
@@ -241,7 +347,9 @@ fn main() {
                 flags: PipelineLayoutCreateFlags::empty(),
                 set_layouts,
                 push_constant_ranges: Vec::new(),
-            }.into_pipeline_layout_create_info(renderer.device().clone()).unwrap(),
+            }
+            .into_pipeline_layout_create_info(renderer.device().clone())
+            .unwrap(),
         )
         .unwrap();
 
@@ -280,7 +388,10 @@ fn main() {
     let hex_mesh = {
         let mut verts: Vec<PosColVertex> = Vec::new();
 
-        verts.push(PosColVertex { position: [0.0, 0.0], color: [0.0, 0.0, 0.0] });
+        verts.push(PosColVertex {
+            position: [0.0, 0.0],
+            color: [0.0, 0.0, 0.0],
+        });
         let num_points = 6;
         let radius = 0.5;
         for i in 0..num_points {
@@ -288,11 +399,14 @@ fn main() {
             let x = radius * ((6.283 / num_points as f32) * i - (6.283 / 4.0)).cos();
             let y = radius * ((6.283 / num_points as f32) * i - (6.283 / 4.0)).sin();
 
-            verts.push(PosColVertex { position: [x, y], color: [0.0, 0.0, 0.0] })
+            verts.push(PosColVertex {
+                position: [x, y],
+                color: [0.0, 0.0, 0.0],
+            })
         }
 
         let mut inds: Vec<u32> = Vec::new();
-        for i in 1..num_points  {
+        for i in 1..num_points {
             inds.push(i);
             inds.push(0);
             inds.push(i + 1);
@@ -310,7 +424,7 @@ fn main() {
             },
             AllocationCreateInfo {
                 memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
-                | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
             },
             verts,
@@ -318,23 +432,21 @@ fn main() {
         .unwrap();
 
         let ibo = Buffer::from_iter(
-            renderer.allocator().clone(), 
+            renderer.allocator().clone(),
             BufferCreateInfo {
                 usage: BufferUsage::INDEX_BUFFER,
                 ..Default::default()
-            }, 
+            },
             AllocationCreateInfo {
-                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
                 ..Default::default()
-            }, 
-            inds.clone()
+            },
+            inds.clone(),
         )
         .unwrap();
 
-        IndexedMesh {
-            vbo,
-            ibo
-        }
+        IndexedMesh { vbo, ibo }
     };
 
     let meshes: HashMap<&'static str, IndexedMesh> = [("hex", hex_mesh)].into();
@@ -342,91 +454,96 @@ fn main() {
     let start_time = Instant::now();
 
     let proxy = event_loop.create_proxy();
-    event_loop.run(move |event, elwt| {
-        elwt.set_control_flow(ControlFlow::Poll);
-        match event {
-            Event::WindowEvent {
-                window_id, 
-                event 
-            } => match event {
-                WindowEvent::CloseRequested => {
-                    _ = renderer.windows.remove(&window_id);
-                    if renderer.windows.len() == 0 {
-                        elwt.exit()
+    event_loop
+        .run(move |event, elwt| {
+            elwt.set_control_flow(ControlFlow::Poll);
+            match event {
+                Event::WindowEvent { window_id, event } => match event {
+                    WindowEvent::CloseRequested => {
+                        _ = renderer.windows.remove(&window_id);
+                        if renderer.windows.len() == 0 {
+                            elwt.exit()
+                        }
                     }
-                },
-                WindowEvent::Resized(_) => {
-                    let windows = &mut renderer.windows;
-                    let mut window = windows.get_mut(&window_id).unwrap().lock().unwrap();
-                    window.recreate_swapchain = true;
-                },
-                WindowEvent::RedrawRequested => {
-                    let rendersystem = DefaultRenderSystem::new(
-                        PresentSystem {
-                            window: renderer.windows.get(&window_id).unwrap().clone(),
-                        }.into(),
-                        vec![
-                            CirclesRenderPass {
-                                elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
-                                pass_ubo: pass_ubo.clone(),
-                                obj_ubo: obj_ubo.clone(),
-                                pipeline: pipeline.clone(),
-                                meshes: meshes.clone(),
-                                canvas: canvas.clone(),
-                            }.into(),
-                            WindowBlitRenderPass {
-                                src_canvas: canvas.clone(),
-                                attachment_index: 0
-                            }.into()
-                        ]
-                    );
-
-                    let mut barrier = renderer.comms.send(rendersystem);
-
-                    _ = proxy.send_event(GlobalEvent::Update);
-                    
-                    barrier.blocking_wait();
-                },
-                _ => ()
-            },
-            Event::AboutToWait => {
-                let windows = &renderer.windows;
-                let barriers: Vec<_> = windows
-                    .iter()
-                    .map(|(_, w)| {
+                    WindowEvent::Resized(_) => {
+                        let windows = &mut renderer.windows;
+                        let mut window = windows.get_mut(&window_id).unwrap().lock().unwrap();
+                        window.recreate_swapchain = true;
+                    }
+                    WindowEvent::RedrawRequested => {
                         let rendersystem = DefaultRenderSystem::new(
                             PresentSystem {
-                                window: w.clone(),
-                            }.into(),
+                                window: renderer.windows.get(&window_id).unwrap().clone(),
+                            }
+                            .into(),
                             vec![
                                 CirclesRenderPass {
-                                    elapsed_time: Instant::now().duration_since(start_time).as_secs_f32(),
+                                    elapsed_time: Instant::now()
+                                        .duration_since(start_time)
+                                        .as_secs_f32(),
                                     pass_ubo: pass_ubo.clone(),
                                     obj_ubo: obj_ubo.clone(),
                                     pipeline: pipeline.clone(),
                                     meshes: meshes.clone(),
                                     canvas: canvas.clone(),
-                                }.into(),
+                                }
+                                .into(),
                                 WindowBlitRenderPass {
                                     src_canvas: canvas.clone(),
-                                    attachment_index: 0
-                                }.into()
-                            ]
+                                    attachment_index: 0,
+                                }
+                                .into(),
+                            ],
                         );
 
-                        renderer.comms.send(rendersystem)
-                    })
-                    .collect();
+                        let mut barrier = renderer.comms.send(rendersystem);
 
-                _ = proxy.send_event(GlobalEvent::Update);
-                
-                barriers.into_iter().for_each(|mut b| { b.blocking_wait() })
-            }
-            Event::UserEvent(event) => match event {
-                GlobalEvent::Update => {
+                        _ = proxy.send_event(GlobalEvent::Update);
+
+                        barrier.blocking_wait();
+                    }
+                    _ => (),
                 },
+                Event::AboutToWait => {
+                    let windows = &renderer.windows;
+                    let barriers: Vec<_> = windows
+                        .iter()
+                        .map(|(_, w)| {
+                            let rendersystem = DefaultRenderSystem::new(
+                                PresentSystem { window: w.clone() }.into(),
+                                vec![
+                                    CirclesRenderPass {
+                                        elapsed_time: Instant::now()
+                                            .duration_since(start_time)
+                                            .as_secs_f32(),
+                                        pass_ubo: pass_ubo.clone(),
+                                        obj_ubo: obj_ubo.clone(),
+                                        pipeline: pipeline.clone(),
+                                        meshes: meshes.clone(),
+                                        canvas: canvas.clone(),
+                                    }
+                                    .into(),
+                                    WindowBlitRenderPass {
+                                        src_canvas: canvas.clone(),
+                                        attachment_index: 0,
+                                    }
+                                    .into(),
+                                ],
+                            );
+
+                            renderer.comms.send(rendersystem)
+                        })
+                        .collect();
+
+                    _ = proxy.send_event(GlobalEvent::Update);
+
+                    barriers.into_iter().for_each(|mut b| b.blocking_wait())
+                }
+                Event::UserEvent(event) => match event {
+                    GlobalEvent::Update => {}
+                },
+                _ => (),
             }
-            _ => ()
-        }
-    }).unwrap();
+        })
+        .unwrap();
 }

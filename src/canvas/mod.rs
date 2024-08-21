@@ -1,25 +1,49 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
-use vulkano::{command_buffer::RenderPassBeginInfo, format::ClearValue, image::{view::ImageView, Image, ImageCreateInfo}, memory::allocator::{AllocationCreateInfo, MemoryAllocator}, render_pass::{Framebuffer, FramebufferCreateInfo, RenderPass}, ValidationError};
+use vulkano::{
+    command_buffer::RenderPassBeginInfo,
+    format::ClearValue,
+    image::{
+        view::ImageView,
+        Image,
+        ImageCreateInfo,
+    },
+    memory::allocator::{
+        AllocationCreateInfo,
+        MemoryAllocator,
+    },
+    render_pass::{
+        Framebuffer,
+        FramebufferCreateInfo,
+        RenderPass,
+    },
+    ValidationError,
+};
 
 use crate::renderpass::CmdBuffer;
 
 pub struct Canvas {
-    inner: Mutex<CanvasInner>
+    pub inner: Mutex<CanvasInner>,
 }
 
 #[derive(Debug)]
-struct CanvasInner {
+pub struct CanvasInner {
     renderpass: Arc<RenderPass>,
     image_create_infos: Vec<ImageCreateInfo>,
     num_frames_in_flight: usize,
-    current_set: usize, 
+    current_set: usize,
     image_sets: Vec<Vec<Arc<ImageView>>>,
     framebuffers: Vec<Arc<Framebuffer>>,
 }
 
 impl Canvas {
-    pub fn empty(renderpass: Arc<RenderPass>, image_create_infos: Vec<ImageCreateInfo>) -> Arc<Self> {
+    pub fn empty(
+        renderpass: Arc<RenderPass>,
+        image_create_infos: Vec<ImageCreateInfo>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             inner: Mutex::new(CanvasInner {
                 renderpass,
@@ -28,7 +52,7 @@ impl Canvas {
                 current_set: 0,
                 image_sets: Vec::new(),
                 framebuffers: Vec::new(),
-            })
+            }),
         })
     }
 
@@ -36,7 +60,7 @@ impl Canvas {
         let guard = self.inner.lock().unwrap();
         match guard.framebuffers.get(0) {
             None => [0, 0],
-            Some(fb) => fb.extent()
+            Some(fb) => fb.extent(),
         }
     }
 
@@ -52,7 +76,12 @@ impl Canvas {
     */
 
     /// Recreate buffers, making sure the images fit the extent precisely
-    pub fn recreate_buffers_exact(self: &Arc<Self>, exact_extent: [u32; 3], num_frames_in_flight: usize, allocator: Arc<dyn MemoryAllocator>) {
+    pub fn recreate_buffers_exact(
+        self: &Arc<Self>,
+        exact_extent: [u32; 3],
+        num_frames_in_flight: usize,
+        allocator: Arc<dyn MemoryAllocator>,
+    ) {
         let mut inner = self.inner.lock().unwrap();
         inner.recreate_buffers_exact(exact_extent, num_frames_in_flight, allocator);
     }
@@ -65,7 +94,7 @@ impl Canvas {
         RenderPassController {
             current_subpass: None,
             image_views: inner.image_sets[inner.current_set].clone(),
-            framebuffer: inner.framebuffers[inner.current_set].clone()
+            framebuffer: inner.framebuffers[inner.current_set].clone(),
         }
     }
 }
@@ -73,36 +102,36 @@ impl Canvas {
 pub struct RenderPassController {
     current_subpass: Option<usize>,
     pub framebuffer: Arc<Framebuffer>,
-    pub image_views: Vec<Arc<ImageView>>
+    pub image_views: Vec<Arc<ImageView>>,
 }
 
 impl RenderPassController {
     pub fn begin_renderpass<'a>(
-        &'a mut self, 
-        cmd_buf: &'a mut CmdBuffer, 
-        clear_values: Vec<Option<ClearValue>>
+        &'a mut self,
+        cmd_buf: &'a mut CmdBuffer,
+        clear_values: Vec<Option<ClearValue>>,
     ) -> Result<&mut CmdBuffer, Box<ValidationError>> {
         match cmd_buf.begin_render_pass(
             RenderPassBeginInfo {
                 clear_values,
                 ..RenderPassBeginInfo::framebuffer(self.framebuffer.clone())
-            }, 
-            Default::default()
+            },
+            Default::default(),
         ) {
             Ok(val) => {
                 self.current_subpass = Some(0);
                 Ok(val)
             }
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
     pub fn begin_renderpass_with_extent<'a>(
-        &'a mut self, 
-        cmd_buf: &'a mut CmdBuffer, 
+        &'a mut self,
+        cmd_buf: &'a mut CmdBuffer,
         clear_values: Vec<Option<ClearValue>>,
         extent: [u32; 2],
-        offset: [u32; 2]
+        offset: [u32; 2],
     ) -> Result<&mut CmdBuffer, Box<ValidationError>> {
         match cmd_buf.begin_render_pass(
             RenderPassBeginInfo {
@@ -110,29 +139,43 @@ impl RenderPassController {
                 render_area_extent: extent,
                 render_area_offset: offset,
                 ..RenderPassBeginInfo::framebuffer(self.framebuffer.clone())
-            }, 
-            Default::default()
+            },
+            Default::default(),
         ) {
             Ok(val) => {
                 self.current_subpass = Some(0);
                 Ok(val)
             }
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
-    pub fn next_subpass<'a>(&'a mut self, cmd_buf: &'a mut CmdBuffer) -> Result<&mut CmdBuffer, Box<ValidationError>> {
-        *self.current_subpass.as_mut().expect("renderpass not active") += 1;
+    pub fn next_subpass<'a>(
+        &'a mut self,
+        cmd_buf: &'a mut CmdBuffer,
+    ) -> Result<&mut CmdBuffer, Box<ValidationError>> {
+        *self
+            .current_subpass
+            .as_mut()
+            .expect("renderpass not active") += 1;
         cmd_buf.next_subpass(Default::default(), Default::default())
     }
 
-    pub fn end_renderpass(self, cmd_buf: &mut CmdBuffer) -> Result<&mut CmdBuffer, Box<ValidationError>> {
+    pub fn end_renderpass(
+        self,
+        cmd_buf: &mut CmdBuffer,
+    ) -> Result<&mut CmdBuffer, Box<ValidationError>> {
         cmd_buf.end_render_pass(Default::default())
     }
 }
 
 impl CanvasInner {
-    pub fn recreate_buffers_exact(&mut self, exact_extent: [u32; 3], num_frames_in_flight: usize, allocator: Arc<dyn MemoryAllocator>) {
+    pub fn recreate_buffers_exact(
+        &mut self,
+        exact_extent: [u32; 3],
+        num_frames_in_flight: usize,
+        allocator: Arc<dyn MemoryAllocator>,
+    ) {
         self.num_frames_in_flight = num_frames_in_flight;
         self.image_sets.clear();
         self.framebuffers.clear();
@@ -144,27 +187,30 @@ impl CanvasInner {
                 set.push(
                     ImageView::new_default(
                         Image::new(
-                            allocator.clone(), 
+                            allocator.clone(),
                             ImageCreateInfo {
                                 extent: exact_extent,
                                 ..create_info
-                            }, 
-                            AllocationCreateInfo::default()
-                        ).unwrap()
-                    ).unwrap()
+                            },
+                            AllocationCreateInfo::default(),
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap(),
                 )
             }
 
             self.framebuffers.push(
                 Framebuffer::new(
-                    self.renderpass.clone(), 
+                    self.renderpass.clone(),
                     FramebufferCreateInfo {
                         attachments: set.clone(),
                         ..Default::default()
-                    }
-                ).unwrap()
+                    },
+                )
+                .unwrap(),
             );
-            
+
             self.image_sets.push(set);
         }
 
