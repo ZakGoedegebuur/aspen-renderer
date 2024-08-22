@@ -2,12 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     renderpass::RenderPassCont,
-    submit_system::{
-        DynamicSubmitSystem,
-        SubmitSystem,
-        SubmitSystemCont,
-    },
-    window_surface::WindowSurface,
+    submit_system::SubmitSystem,
     GraphicsObjects,
 };
 
@@ -16,14 +11,14 @@ pub trait RenderSystem {
 }
 
 pub struct DefaultRenderSystem<SST: SubmitSystem> {
-    submit_system: DynamicSubmitSystem<SST>,
-    render_passes: Vec<Box<dyn RenderPassCont<SharedData = SST::SharedType> + Send>>,
+    submit_system: SST,
+    render_passes: Vec<Box<dyn RenderPassCont<SharedData = SST::SharedType, CmdBufType = SST::CmdBufType> + Send>>,
 }
 
 impl<SST: SubmitSystem> DefaultRenderSystem<SST> {
     pub fn new(
-        submit_system: DynamicSubmitSystem<SST>,
-        render_passes: Vec<Box<dyn RenderPassCont<SharedData = SST::SharedType> + Send>>,
+        submit_system: SST,
+        render_passes: Vec<Box<dyn RenderPassCont<SharedData = SST::SharedType, CmdBufType = SST::CmdBufType> + Send>>,
     ) -> Self {
         Self {
             submit_system,
@@ -34,7 +29,7 @@ impl<SST: SubmitSystem> DefaultRenderSystem<SST> {
 
 impl<SST: SubmitSystem> RenderSystem for DefaultRenderSystem<SST> {
     fn run(&mut self, graphics_objects: Arc<GraphicsObjects>) {
-        let (shared, mut cmd_buf) = match self.submit_system.setup(graphics_objects.clone()) {
+        let (shared, setup_data, mut cmd_buf) = match self.submit_system.setup(graphics_objects.clone()) {
             Ok(val) => val,
             Err(_) => return,
         };
@@ -58,15 +53,6 @@ impl<SST: SubmitSystem> RenderSystem for DefaultRenderSystem<SST> {
         }
 
         self.submit_system
-            .submit(graphics_objects.clone(), cmd_buf, shared)
+            .submit(graphics_objects.clone(), cmd_buf, setup_data, shared)
     }
-}
-
-pub enum UnifiedRenderSystem {
-    Windowed(WindowedRenderSystem),
-    Generic(()),
-}
-
-pub struct WindowedRenderSystem {
-    pub target_window: Arc<WindowSurface>,
 }

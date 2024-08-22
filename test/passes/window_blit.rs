@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use aspen_renderer::{
     canvas::Canvas,
-    renderpass::RenderPass,
+    renderpass::{CmdBuffer, RenderPass},
 };
 use vulkano::{
     command_buffer::BlitImageInfo,
@@ -18,6 +18,7 @@ pub struct WindowBlitRenderPass {
 
 impl RenderPass for WindowBlitRenderPass {
     type SharedData = SharedInfo;
+    type CmdBufType = Box<CmdBuffer>;
     type PreProcessed = ();
     type Output = ();
 
@@ -42,7 +43,7 @@ impl RenderPass for WindowBlitRenderPass {
                     self.src_canvas.current_image_set()[self.attachment_index]
                         .image()
                         .clone(),
-                    shared.window.lock().unwrap().images[shared.image_index].clone(),
+                    shared.window.lock().images[shared.image_index].clone(),
                 );
 
                 blit.filter = Filter::Linear;

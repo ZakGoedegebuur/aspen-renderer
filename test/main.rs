@@ -1,10 +1,7 @@
 use std::{
     collections::HashMap,
     io::Read,
-    sync::{
-        Arc,
-        Mutex,
-    },
+    sync::Arc,
     time::Instant,
 };
 
@@ -13,6 +10,7 @@ use aspen_renderer::{
     render_system::DefaultRenderSystem,
     Renderer,
 };
+use parking_lot::Mutex;
 use passes::{
     circles::CirclesRenderPass,
     present::PresentSystem,
@@ -467,15 +465,14 @@ fn main() {
                     }
                     WindowEvent::Resized(_) => {
                         let windows = &mut renderer.windows;
-                        let mut window = windows.get_mut(&window_id).unwrap().lock().unwrap();
+                        let mut window = windows.get_mut(&window_id).unwrap().lock();
                         window.recreate_swapchain = true;
                     }
                     WindowEvent::RedrawRequested => {
                         let rendersystem = DefaultRenderSystem::new(
                             PresentSystem {
                                 window: renderer.windows.get(&window_id).unwrap().clone(),
-                            }
-                            .into(),
+                            },
                             vec![
                                 CirclesRenderPass {
                                     elapsed_time: Instant::now()
@@ -510,7 +507,9 @@ fn main() {
                         .iter()
                         .map(|(_, w)| {
                             let rendersystem = DefaultRenderSystem::new(
-                                PresentSystem { window: w.clone() }.into(),
+                                PresentSystem { 
+                                    window: w.clone() 
+                                },
                                 vec![
                                     CirclesRenderPass {
                                         elapsed_time: Instant::now()

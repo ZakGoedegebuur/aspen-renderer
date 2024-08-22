@@ -1,10 +1,7 @@
 use core::f32;
 use std::{
     collections::HashMap,
-    sync::{
-        Arc,
-        Mutex,
-    },
+    sync::Arc,
 };
 
 use aspen_renderer::{
@@ -24,6 +21,7 @@ use nalgebra::{
     UnitVector3,
     Vector3,
 };
+use parking_lot::Mutex;
 use vulkano::{
     buffer::{
         allocator::SubbufferAllocator,
@@ -58,6 +56,7 @@ impl RenderPass for CirclesRenderPass {
     type SharedData = SharedInfo;
     type PreProcessed = ();
     type Output = ();
+    type CmdBufType = Box<CmdBuffer>;
 
     fn preprocess(
         &mut self,
@@ -201,7 +200,7 @@ impl RenderPass for CirclesRenderPass {
         };
 
         let subbuffer = {
-            let ubo = self.pass_ubo.lock().unwrap();
+            let ubo = self.pass_ubo.lock();
             let subbuffer = ubo.allocate_sized().unwrap();
             *subbuffer.write().unwrap() = pass_data;
             subbuffer
@@ -216,7 +215,7 @@ impl RenderPass for CirclesRenderPass {
         .unwrap();
 
         let subbuffer = {
-            let ubo = self.obj_ubo.lock().unwrap();
+            let ubo = self.obj_ubo.lock();
             let subbuffer = ubo.allocate_sized().unwrap();
             *subbuffer.write().unwrap() = data;
             subbuffer

@@ -1,8 +1,6 @@
-use std::sync::{
-    Arc,
-    Mutex,
-};
+use std::sync::Arc;
 
+use parking_lot::Mutex;
 use vulkano::{
     command_buffer::RenderPassBeginInfo,
     format::ClearValue,
@@ -57,7 +55,7 @@ impl Canvas {
     }
 
     pub fn extent(self: &Arc<Self>) -> [u32; 2] {
-        let guard = self.inner.lock().unwrap();
+        let guard = self.inner.lock();
         match guard.framebuffers.get(0) {
             None => [0, 0],
             Some(fb) => fb.extent(),
@@ -65,7 +63,7 @@ impl Canvas {
     }
 
     pub fn current_image_set(self: &Arc<Self>) -> Vec<Arc<ImageView>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.image_sets[inner.current_set].clone()
     }
 
@@ -82,12 +80,12 @@ impl Canvas {
         num_frames_in_flight: usize,
         allocator: Arc<dyn MemoryAllocator>,
     ) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         inner.recreate_buffers_exact(exact_extent, num_frames_in_flight, allocator);
     }
 
     pub fn pass_controller(self: &Arc<Self>) -> RenderPassController {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         inner.current_set += 1;
         inner.current_set %= inner.num_frames_in_flight;
 

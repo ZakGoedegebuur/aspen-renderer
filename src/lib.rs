@@ -1,6 +1,5 @@
 pub mod canvas;
 pub mod drawable;
-pub mod render_path;
 pub mod render_system;
 pub mod renderpass;
 pub mod submit_system;
@@ -17,11 +16,11 @@ use std::{
             SyncSender,
         },
         Arc,
-        Mutex,
     },
     thread,
 };
 
+use parking_lot::Mutex;
 use vulkano::{
     command_buffer::allocator::StandardCommandBufferAllocator,
     descriptor_set::allocator::StandardDescriptorSetAllocator,
@@ -109,6 +108,7 @@ impl Renderer {
                 .build(&event_loop)
                 .unwrap(),
         );
+
         let surface = Surface::from_window(instance.clone(), window.clone()).unwrap();
 
         let device_extensions = DeviceExtensions {

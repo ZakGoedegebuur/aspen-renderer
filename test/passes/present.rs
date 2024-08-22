@@ -1,7 +1,4 @@
-use std::sync::{
-    Arc,
-    Mutex,
-};
+use std::sync::Arc;
 
 use aspen_renderer::{
     renderpass::{
@@ -12,6 +9,7 @@ use aspen_renderer::{
     window_surface::WindowSurface,
     GraphicsObjects,
 };
+use parking_lot::Mutex;
 use vulkano::{
     command_buffer::{
         AutoCommandBufferBuilder,
@@ -47,12 +45,13 @@ pub struct SetupData {
 impl SubmitSystem for PresentSystem {
     type SharedType = SharedInfo;
     type SetupType = SetupData;
+    type CmdBufType = Box<CmdBuffer>;
 
     fn setup(
         &mut self,
         graphics_objects: Arc<GraphicsObjects>,
     ) -> Result<(Arc<Self::SharedType>, Self::SetupType, Box<CmdBuffer>), HaltPolicy> {
-        let mut window = self.window.lock().unwrap();
+        let mut window = self.window.lock();
         let image_extent: [u32; 2] = window.window.inner_size().into();
 
         if image_extent.contains(&0) {
@@ -125,7 +124,7 @@ impl SubmitSystem for PresentSystem {
         setup_data: Self::SetupType,
         shared: Arc<Self::SharedType>,
     ) {
-        let mut window = self.window.lock().unwrap();
+        let mut window = self.window.lock();
 
         let command_buffer = cmd_buffer.build().unwrap();
 

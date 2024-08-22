@@ -22,6 +22,7 @@ pub trait RenderPass {
     type SharedData;
     type PreProcessed;
     type Output;
+    type CmdBufType;
     fn preprocess(
         &mut self,
         graphics_objects: Arc<GraphicsObjects>,
@@ -31,7 +32,7 @@ pub trait RenderPass {
         &mut self,
         graphics_objects: Arc<GraphicsObjects>,
         shared: Arc<Self::SharedData>,
-        cmd_buffer: &mut Box<CmdBuffer>,
+        cmd_buffer: &mut Self::CmdBufType,
         preprocessed: Self::PreProcessed,
     ) -> Result<Self::Output, HaltPolicy>;
     fn postprocess(
@@ -44,6 +45,7 @@ pub trait RenderPass {
 
 pub trait RenderPassCont {
     type SharedData;
+    type CmdBufType;
     fn preprocess(
         &mut self,
         graphics_objects: Arc<GraphicsObjects>,
@@ -53,7 +55,7 @@ pub trait RenderPassCont {
         &mut self,
         graphics_objects: Arc<GraphicsObjects>,
         shared: Arc<Self::SharedData>,
-        cmd_buffer: &mut Box<CmdBuffer>,
+        cmd_buffer: &mut Self::CmdBufType,
     ) -> Result<(), HaltPolicy>;
     fn postprocess(
         &mut self,
@@ -82,7 +84,7 @@ impl<T: RenderPass> DynamicRenderPass<T> {
     }
 }
 
-impl<T> From<T> for Box<dyn RenderPassCont<SharedData = T::SharedData> + Send>
+impl<T> From<T> for Box<dyn RenderPassCont<SharedData = T::SharedData, CmdBufType = T::CmdBufType> + Send>
 where
     T: RenderPass + Send + 'static,
     T::PreProcessed: Send,
@@ -98,6 +100,7 @@ where
 
 impl<T: RenderPass> RenderPassCont for DynamicRenderPass<T> {
     type SharedData = T::SharedData;
+    type CmdBufType = T::CmdBufType;
 
     fn preprocess(
         &mut self,
@@ -112,7 +115,7 @@ impl<T: RenderPass> RenderPassCont for DynamicRenderPass<T> {
         &mut self,
         graphics_objects: Arc<GraphicsObjects>,
         shared: Arc<Self::SharedData>,
-        cmd_buffer: &mut Box<CmdBuffer>,
+        cmd_buffer: &mut Self::CmdBufType,
     ) -> Result<(), HaltPolicy> {
         let data = match std::mem::replace(&mut self.data, RenderPassType::None) {
             RenderPassType::PreProcessed(data) => data,
